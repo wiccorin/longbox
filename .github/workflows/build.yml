@@ -10,12 +10,13 @@ permissions:
 
 # A newer push replaces a build that's still running.
 concurrency:
-  group: build-ipa
+  group: build-ipa-intel
   cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: macos-15
+    # Intel Macs: GitHub's Apple-silicon runners have had long queues.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
 
