@@ -9,6 +9,9 @@ struct ReaderView: View {
     @State private var page = 0
     @State private var ready = false
     @State private var showChrome = true
+    @State private var aspects: [CGFloat]?
+    @State private var scrub: Double = 0
+    @State private var scrubbing = false
 
     private var book: Book? { store.book(bookID) }
 
@@ -18,9 +21,15 @@ struct ReaderView: View {
 
             if let book, ready {
                 let urls = Storage.pageURLs(for: book)
+
                 Group {
                     if book.mode == .vertical {
-                        VerticalReader(urls: urls, page: $page, onTap: toggleChrome)
+                        if let aspects, aspects.count == urls.count {
+                            StripReader(urls: urls, aspects: aspects, page: $page, onTap: toggleChrome)
+                        } else {
+                            ProgressView()
+                                .tint(.white)
+                        }
                     } else {
                         PagedReader(
                             urls: urls,
@@ -31,9 +40,14 @@ struct ReaderView: View {
                     }
                 }
                 .ignoresSafeArea()
+                .task(id: book.mode) {
+                    if book.mode == .vertical && aspects == nil {
+                        aspects = await PageImage.aspects(urls)
+                    }
+                }
 
                 if showChrome {
-                    chrome(book)
+                    chrome(book, urls: urls)
                         .transition(.opacity)
                 }
             }
@@ -43,11 +57,15 @@ struct ReaderView: View {
         .onAppear {
             if !ready {
                 page = book?.currentPage ?? 0
+                scrub = Double(page)
                 ready = true
             }
         }
         .onChange(of: page) { newValue in
             store.setPage(newValue, for: bookID)
+            if !scrubbing {
+                scrub = Double(newValue)
+            }
         }
     }
 
@@ -57,135 +75,132 @@ struct ReaderView: View {
         }
     }
 
-    private func chrome(_ book: Book) -> some View {
+    // MARK: Chrome
+
+    private func chrome(_ book: Book, urls: [URL]) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button {
-                    store.setPage(page, for: bookID)
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 40, height: 40)
+            topBar(book)
+            Spacer(minLength: 0)
+            if scrubbing, urls.indices.contains(Int(scrub.rounded())) {
+                ScrubPreview(url: urls[Int(scrub.rounded())], number: Int(scrub.rounded()) + 1)
+                    .padding(.bottom, 14)
+                    .transition(.opacity)
+            }
+            bottomBar(book)
+        }
+    }
+
+    private func topBar(_ book: Book) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                store.setPage(page, for: bookID)
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 17, weight: .black))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Close")
+
+            Text(book.title)
+                .font(Theme.display(21))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Menu {
+                Picker("Reading direction", selection: Binding(
+                    get: { book.mode },
+                    set: { store.setMode($0, for: bookID) }
+                )) {
+                    ForEach(ReadingMode.allCases) { mode in
+                        Label(mode.label, systemImage: mode.symbol).tag(mode)
+                    }
                 }
-                .accessibilityLabel("Close")
+            } label: {
+                Image(systemName: book.mode.symbol)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundColor(.black)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Theme.yellow))
+                    .overlay(Circle().strokeBorder(Color.black, lineWidth: 2))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Reading direction")
+        }
+        .foregroundColor(Theme.paper)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Theme.ink.ignoresSafeArea(edges: .top))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Theme.yellow)
+                .frame(height: 3)
+        }
+    }
 
-                Text(book.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Menu {
-                    Picker("Reading direction", selection: Binding(
-                        get: { book.mode },
-                        set: { store.setMode($0, for: bookID) }
-                    )) {
-                        ForEach(ReadingMode.allCases) { mode in
-                            Label(mode.label, systemImage: mode.symbol).tag(mode)
+    private func bottomBar(_ book: Book) -> some View {
+        let shown = scrubbing ? Int(scrub.rounded()) : page
+        return VStack(spacing: 10) {
+            if book.pageCount > 1 {
+                Slider(
+                    value: $scrub,
+                    in: 0...Double(book.pageCount - 1),
+                    step: 1,
+                    onEditingChanged: { editing in
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            scrubbing = editing
+                        }
+                        if !editing {
+                            page = Int(scrub.rounded())
                         }
                     }
-                } label: {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 40, height: 40)
-                }
-                .accessibilityLabel("Reading direction")
+                )
+                .tint(Theme.yellow)
+                .environment(\.layoutDirection, book.mode == .rightToLeft ? .rightToLeft : .leftToRight)
+                .accessibilityLabel("Page")
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.ultraThinMaterial)
-
-            Spacer()
-
-            VStack(spacing: 6) {
-                if book.pageCount > 1 {
-                    Slider(
-                        value: Binding(
-                            get: { Double(page) },
-                            set: { page = Int($0.rounded()) }
-                        ),
-                        in: 0...Double(book.pageCount - 1),
-                        step: 1
-                    )
-                    .environment(\.layoutDirection, book.mode == .rightToLeft ? .rightToLeft : .leftToRight)
-                    .accessibilityLabel("Page")
-                }
-                Text("\(page + 1) / \(book.pageCount)")
-                    .font(.footnote.weight(.medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
-            .background(.ultraThinMaterial)
+            CaptionBox(text: "Page \(shown + 1) of \(book.pageCount)", shadow: .black)
         }
-        .foregroundStyle(.white)
-    }
-}
-
-/// Continuous top-to-bottom reading, for webtoons and long strips.
-struct VerticalReader: View {
-    let urls: [URL]
-    @Binding var page: Int
-    let onTap: () -> Void
-
-    /// The last page this view reported itself, so outside jumps (the slider) can be told apart.
-    @State private var reported = -1
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    ForEach(urls.indices, id: \.self) { index in
-                        StripPage(url: urls[index])
-                            .id(index)
-                            .onAppear {
-                                reported = index
-                                if page != index { page = index }
-                            }
-                    }
-                }
-            }
-            .onAppear {
-                reported = page
-                proxy.scrollTo(page, anchor: .top)
-            }
-            .onChange(of: page) { newValue in
-                if newValue != reported {
-                    reported = newValue
-                    proxy.scrollTo(newValue, anchor: .top)
-                }
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
-    }
-}
-
-private struct StripPage: View {
-    let url: URL
-    @State private var image: UIImage?
-    @State private var aspect: CGFloat = 0.7
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                Color.black
-                    .aspectRatio(aspect, contentMode: .fit)
-                    .overlay { ProgressView().tint(.white) }
-            }
-        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity)
-        .task(id: url) {
-            if let size = PageImage.pixelSize(url) {
-                aspect = size.width / size.height
+        .background(Theme.ink.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Theme.yellow)
+                .frame(height: 3)
+        }
+    }
+}
+
+/// The floating page preview shown while dragging the scrubber.
+private struct ScrubPreview: View {
+    let url: URL
+    let number: Int
+    @State private var image: UIImage?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Theme.panel
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                }
             }
-            image = await PageImage.page(url)
+            .frame(width: 130, height: 195)
+            .inkPanel(stroke: Theme.paper, shadow: Theme.red)
+
+            Text("\(number)")
+                .font(Theme.display(22))
+                .monospacedDigit()
+                .foregroundColor(Theme.yellow)
+                .shadow(color: .black, radius: 0, x: 2, y: 2)
+        }
+        .task(id: url) {
+            image = await PageImage.thumbnail(url)
         }
     }
 }

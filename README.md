@@ -7,7 +7,8 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 - Add .cbz and .cbr files from the Files app, or with "Open in Longbox"
 - Library with covers, progress, and a Continue Reading shortcut
 - Three reading modes per book: left to right, right to left (manga), vertical scroll
-- Tap the edges to turn pages, tap the middle for controls, pinch or double-tap to zoom
+- Tap the edges to turn pages, tap the middle for controls, pinch or double-tap to zoom in every mode
+- Page scrubber with a thumbnail preview
 - Everything stays on the device. No accounts, no network access.
 
 ## Install from Windows
@@ -27,4 +28,4 @@ The GitHub Actions workflow in `.github/workflows/build.yml` builds an unsigned 
 
 ## Credits
 
-Uses [ZIPFoundation](https://github.com/weichsel/ZIPFoundation) and [Unrar.swift](https://github.com/mtgto/Unrar.swift) (which includes UnRAR source by Alexander Roshal).
+Uses [ZIPFoundation](https://github.com/weichsel/ZIPFoundation) and [Unrar.swift](https://github.com/mtgto/Unrar.swift) (which includes UnRAR source by Alexander Roshal). Display type is [Bangers](https://github.com/google/fonts/tree/main/ofl/bangers) under the SIL Open Font License.

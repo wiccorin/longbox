@@ -11,7 +11,9 @@ struct LibraryView: View {
     @State private var newTitle = ""
     @State private var deleting: Book?
 
-    private let columns = [GridItem(.adaptive(minimum: 104, maximum: 170), spacing: 14, alignment: .top)]
+    private let columns = [GridItem(.adaptive(minimum: 100, maximum: 170), spacing: 18, alignment: .top)]
+
+    // MARK: Derived lists
 
     private var sortedBooks: [Book] {
         switch sort {
@@ -24,57 +26,69 @@ struct LibraryView: View {
         }
     }
 
-    private var continueBook: Book? {
+    private var inProgress: [Book] {
         store.books
             .filter { $0.isStarted && !$0.isFinished }
-            .max { ($0.lastReadAt ?? .distantPast) < ($1.lastReadAt ?? .distantPast) }
+            .sorted { ($0.lastReadAt ?? .distantPast) > ($1.lastReadAt ?? .distantPast) }
     }
 
+    private var continueBook: Book? { inProgress.first }
+    private var otherInProgress: [Book] { Array(inProgress.dropFirst()) }
+
+    private var unread: [Book] {
+        store.books
+            .filter { !$0.isStarted }
+            .sorted { $0.addedAt > $1.addedAt }
+    }
+
+    private var showsUnreadShelf: Bool {
+        !unread.isEmpty && store.books.count >= 4 && unread.count < store.books.count
+    }
+
+    private var statsLine: String {
+        let count = store.books.count
+        let pages = store.books.reduce(0) { $0 + ($1.isStarted ? $1.currentPage + 1 : 0) }
+        let comics = count == 1 ? "1 COMIC" : "\(count) COMICS"
+        let read = pages == 1 ? "1 PAGE READ" : "\(pages) PAGES READ"
+        return comics + "  •  " + read
+    }
+
+    // MARK: Body
+
     var body: some View {
-        NavigationStack {
-            Group {
-                if store.books.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 22) {
-                            if let book = continueBook {
-                                continueCard(book)
-                            }
-                            LazyVGrid(columns: columns, spacing: 18) {
+        ZStack {
+            Theme.ink.ignoresSafeArea()
+            Halftone(color: Theme.panel).ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    header
+
+                    if store.books.isEmpty {
+                        emptyState
+                    } else {
+                        if let book = continueBook {
+                            hero(book)
+                        }
+                        if !otherInProgress.isEmpty {
+                            shelf("Jump back in", books: otherInProgress)
+                        }
+                        if showsUnreadShelf {
+                            shelf("New in the box", books: unread)
+                        }
+                        VStack(alignment: .leading, spacing: 16) {
+                            CaptionBox(text: "The whole box")
+                            LazyVGrid(columns: columns, spacing: 22) {
                                 ForEach(sortedBooks) { book in
                                     cell(book)
                                 }
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
                     }
                 }
-            }
-            .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("Longbox")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
-                        Picker("Sort by", selection: $sort) {
-                            Text("Recently read").tag("recent")
-                            Text("Recently added").tag("added")
-                            Text("Title").tag("title")
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                    }
-                    .accessibilityLabel("Sort")
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingPicker = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Add comics")
-                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 40)
             }
         }
         .fileImporter(
@@ -94,15 +108,20 @@ struct LibraryView: View {
             if let name = store.importingName {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Adding \(name)")
+                        .tint(.black)
+                    Text("ADDING \(name.uppercased())")
+                        .font(Theme.caption(12))
+                        .italic()
                         .lineLimit(1)
-                        .font(.footnote.weight(.medium))
+                        .foregroundColor(.black)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding(.bottom, 24)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Theme.yellow)
+                .overlay(Rectangle().strokeBorder(Color.black, lineWidth: 2.5))
+                .background(Rectangle().fill(Theme.red).offset(x: 4, y: 4))
                 .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
         }
         .alert(
@@ -148,97 +167,184 @@ struct LibraryView: View {
         }
     }
 
-    // MARK: Pieces
+    // MARK: Header
 
-    private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "shippingbox")
-                .font(.system(size: 52, weight: .light))
-                .foregroundStyle(Theme.accent)
-            Text("Your box is empty")
-                .font(.title3.weight(.semibold))
-            Text("Add .cbz or .cbr files from the Files app. Longbox keeps its own copy and remembers your page.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 300)
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("LONGBOX")
+                    .font(Theme.display(50))
+                    .foregroundColor(Theme.yellow)
+                    .shadow(color: Theme.red, radius: 0, x: 3, y: 3)
+                    .padding(.trailing, 6)
+                if !store.books.isEmpty {
+                    Text(statsLine)
+                        .font(Theme.caption(11))
+                        .italic()
+                        .kerning(0.5)
+                        .monospacedDigit()
+                        .foregroundColor(Theme.paper.opacity(0.7))
+                }
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Picker("Sort by", selection: $sort) {
+                    Text("Recently read").tag("recent")
+                    Text("Recently added").tag("added")
+                    Text("Title").tag("title")
+                }
+            } label: {
+                RoundIcon(systemName: "arrow.up.arrow.down")
+            }
+            .accessibilityLabel("Sort")
+
             Button {
                 showingPicker = true
             } label: {
-                Label("Add comics", systemImage: "plus")
-                    .font(.headline)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                RoundIcon(systemName: "plus")
             }
-            .buttonStyle(.borderedProminent)
-            .foregroundStyle(.black)
-            .padding(.top, 6)
+            .buttonStyle(PressDownStyle())
+            .accessibilityLabel("Add comics")
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func continueCard(_ book: Book) -> some View {
+    // MARK: Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 26) {
+            VStack(spacing: 8) {
+                Text("THE BOX IS EMPTY!")
+                    .font(Theme.display(32))
+                    .foregroundColor(.black)
+                Text("Add .cbz or .cbr files from the Files app. Longbox keeps its own copy and remembers your page.")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(Color.black.opacity(0.78))
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 22)
+            .padding(.bottom, 46)
+            .frame(maxWidth: 330)
+            .background(SpeechBubble().fill(Theme.paper))
+            .background(SpeechBubble().fill(Theme.yellow).offset(x: 6, y: 6))
+
+            Button("ADD COMICS") {
+                showingPicker = true
+            }
+            .buttonStyle(ComicButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 48)
+    }
+
+    // MARK: Hero
+
+    private func hero(_ book: Book) -> some View {
         Button {
             reading = book
         } label: {
-            HStack(spacing: 14) {
+            HStack(alignment: .center, spacing: 18) {
                 CoverView(id: book.id)
-                    .frame(width: 74)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("CONTINUE READING")
-                        .font(.caption2.weight(.bold))
-                        .kerning(0.8)
-                        .foregroundStyle(Theme.accent)
+                    .frame(width: 112)
+                    .inkPanel(stroke: .black, shadow: .black)
+                    .rotationEffect(.degrees(-4))
+                    .padding(.leading, 4)
+
+                VStack(alignment: .leading, spacing: 9) {
+                    CaptionBox(text: "Continue reading", fill: Theme.paper, shadow: .black, size: 11)
                     Text(book.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .font(Theme.display(25))
+                        .foregroundColor(.black)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.8)
                         .multilineTextAlignment(.leading)
-                    Text("Page \(book.currentPage + 1) of \(book.pageCount)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    ChunkyProgress(value: book.progress)
+                    Text("PAGE \(book.currentPage + 1) OF \(book.pageCount)")
+                        .font(Theme.caption(12))
                         .monospacedDigit()
-                    ProgressView(value: book.progress)
-                        .tint(Theme.accent)
+                        .foregroundColor(Color.black.opacity(0.75))
+                    ComicPill(text: "READ!")
+                        .padding(.top, 2)
+                        .padding(.bottom, 3)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(12)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 18)
+            .background(
+                ZStack {
+                    Theme.yellow
+                    Halftone(color: Theme.orange, spacing: 10, maxRadius: 3.8)
+                }
+            )
+            .inkPanel(corner: 6, line: 3, offset: 6, stroke: .black, shadow: Theme.red)
+            .padding(.trailing, 6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressDownStyle())
+    }
+
+    // MARK: Shelves and cells
+
+    private func shelf(_ title: String, books: [Book]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            CaptionBox(text: title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 18) {
+                    ForEach(books) { book in
+                        cell(book)
+                            .frame(width: 116)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+            }
+            .padding(.horizontal, -16)
+        }
     }
 
     private func cell(_ book: Book) -> some View {
         Button {
             reading = book
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 CoverView(id: book.id)
-                    .overlay(alignment: .bottom) {
-                        if book.isStarted && !book.isFinished {
-                            GeometryReader { geo in
-                                Rectangle()
-                                    .fill(Theme.accent)
-                                    .frame(width: geo.size.width * book.progress, height: 3)
-                                    .frame(maxHeight: .infinity, alignment: .bottom)
-                            }
+                    .inkPanel(stroke: Theme.paper, shadow: .black)
+                    .overlay {
+                        if book.isFinished {
+                            StampBadge(text: "DONE")
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(alignment: .topTrailing) {
+                        if !book.isStarted {
+                            BurstBadge(text: "NEW!")
+                                .offset(x: 12, y: -14)
+                        }
+                    }
+
+                if book.isStarted && !book.isFinished {
+                    ChunkyProgress(
+                        value: book.progress,
+                        fill: Theme.yellow,
+                        track: Theme.panel,
+                        border: Theme.paper,
+                        height: 8
+                    )
+                }
+
                 Text(book.title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(Theme.paper)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Text(status(book))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.caption(10))
+                    .kerning(0.4)
                     .monospacedDigit()
+                    .foregroundColor(Theme.paper.opacity(0.6))
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressDownStyle())
         .contextMenu {
             Button {
                 newTitle = book.title
@@ -262,12 +368,13 @@ struct LibraryView: View {
     }
 
     private func status(_ book: Book) -> String {
-        if book.isFinished { return "Finished" }
-        if book.isStarted { return "\(book.currentPage + 1) of \(book.pageCount)" }
-        return "\(book.pageCount) pages"
+        if book.isFinished { return "FINISHED" }
+        if book.isStarted { return "PAGE \(book.currentPage + 1) OF \(book.pageCount)" }
+        return "\(book.pageCount) PAGES"
     }
 }
 
+/// A book's cover at the standard 2:3 comic proportion. Callers add the border.
 struct CoverView: View {
     let id: UUID
     @State private var image: UIImage?
@@ -282,14 +389,14 @@ struct CoverView: View {
                         .scaledToFill()
                 } else {
                     ZStack {
-                        Theme.card
+                        Theme.panel
                         Image(systemName: "book.closed")
                             .font(.title2)
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(Theme.paper.opacity(0.5))
                     }
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipped()
             .task(id: id) {
                 let path = Storage.cover(for: id).path
                 image = await Task.detached(priority: .utility) {

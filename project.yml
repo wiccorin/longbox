@@ -29,6 +29,8 @@ targets:
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
+        UIAppFonts:
+          - Bangers-Regular.ttf
         LSSupportsOpeningDocumentsInPlace: false
         ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations:

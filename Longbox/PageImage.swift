@@ -46,6 +46,23 @@ enum PageImage {
         return UIImage(cgImage: image)
     }
 
+    /// Width-over-height for every page, read from file headers without decoding.
+    static func aspects(_ urls: [URL]) async -> [CGFloat] {
+        await Task.detached(priority: .userInitiated) {
+            urls.map { url -> CGFloat in
+                guard let size = pixelSize(url) else { return 0.66 }
+                return size.width / size.height
+            }
+        }.value
+    }
+
+    /// A small preview, for the page scrubber.
+    static func thumbnail(_ url: URL) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) {
+            downsampled(url, shortSide: 260)
+        }.value
+    }
+
     static func page(_ url: URL) async -> UIImage? {
         let key = url as NSURL
         if let hit = cache.object(forKey: key) { return hit }
