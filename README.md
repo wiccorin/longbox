@@ -9,6 +9,7 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 - Three reading modes per book: left to right, right to left (manga), vertical scroll
 - Tap the edges to turn pages, tap the middle for controls, pinch or double-tap to zoom in every mode
 - Page scrubber with a thumbnail preview
+- Reading time, per comic and in total
 - Search, sort by release date, and a details screen with author, publisher, year, description and chapters
 - Reads details and chapters from `ComicInfo.xml` and folders inside the file; you can also mark your own chapters
 - Your comics stay on the device. The only network use is the optional "Find details" lookup, which sends your search text to Google Books.

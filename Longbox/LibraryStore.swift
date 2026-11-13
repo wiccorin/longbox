@@ -73,6 +73,13 @@ final class LibraryStore: ObservableObject {
         save()
     }
 
+    func addReadingTime(_ seconds: Double, for id: UUID) {
+        guard seconds > 0 else { return }
+        update(id) { book in
+            book.secondsRead = (book.secondsRead ?? 0) + seconds
+        }
+    }
+
     /// Applies any edit to a book's details and saves.
     func update(_ id: UUID, _ change: (inout Book) -> Void) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }

@@ -129,6 +129,7 @@ struct BookDetailView: View {
                 fact("Series", series)
             }
             fact("Length", "\(book.pageCount) pages")
+            fact("Time read", (book.secondsRead ?? 0) > 0 ? ReadingTime.words(book.secondsRead ?? 0) : "None yet")
         }
     }
 

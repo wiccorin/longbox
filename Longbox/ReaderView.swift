@@ -15,6 +15,8 @@ struct ReaderView: View {
     @State private var scrubbing = false
     @State private var urls: [URL] = []
     @State private var saveTask: Task<Void, Never>?
+    /// When the current stretch of reading began. Nil while the app is in the background.
+    @State private var sessionStart: Date?
 
     private var book: Book? { store.book(bookID) }
 
@@ -63,6 +65,7 @@ struct ReaderView: View {
                     urls = Storage.pageURLs(for: book)
                 }
                 ready = true
+                sessionStart = Date()
             }
         }
         .onChange(of: page) { newValue in
@@ -79,17 +82,29 @@ struct ReaderView: View {
             }
         }
         .onChange(of: scenePhase) { phase in
-            if phase != .active && ready {
+            guard ready else { return }
+            if phase == .active {
+                if sessionStart == nil { sessionStart = Date() }
+            } else {
                 saveTask?.cancel()
                 store.setPage(page, for: bookID)
+                commitReadingTime()
             }
         }
         .onDisappear {
             saveTask?.cancel()
             if ready {
                 store.setPage(page, for: bookID)
+                commitReadingTime()
             }
         }
+    }
+
+    /// Banks the time since the session began. Only counts while the reader is on screen.
+    private func commitReadingTime() {
+        guard let start = sessionStart else { return }
+        sessionStart = nil
+        store.addReadingTime(Date().timeIntervalSince(start), for: bookID)
     }
 
     private func toggleChrome() {
@@ -197,7 +212,19 @@ struct ReaderView: View {
                 .environment(\.layoutDirection, book.mode == .rightToLeft ? .rightToLeft : .leftToRight)
                 .accessibilityLabel("Page")
             }
-            CaptionBox(text: "Page \(shown + 1) of \(book.pageCount)", shadow: .black)
+            HStack(alignment: .center, spacing: 12) {
+                CaptionBox(text: "Page \(shown + 1) of \(book.pageCount)", shadow: .black)
+                Spacer(minLength: 0)
+                TimelineView(.periodic(from: Date(), by: 1)) { context in
+                    let live = sessionStart.map { max(context.date.timeIntervalSince($0), 0) } ?? 0
+                    Text("TIME READING  " + ReadingTime.clock((book.secondsRead ?? 0) + live))
+                        .font(Theme.caption(11))
+                        .italic()
+                        .kerning(0.5)
+                        .monospacedDigit()
+                        .foregroundColor(Theme.paper.opacity(0.8))
+                }
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)

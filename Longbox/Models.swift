@@ -61,6 +61,8 @@ struct Book: Identifiable, Codable, Equatable {
     var month: Int?
     var summary: String?
     var chapters: [Chapter]?
+    /// Total time spent with this book open in the reader.
+    var secondsRead: Double?
 
     var pageCount: Int { pages.count }
 
@@ -213,5 +215,30 @@ enum TitleParser {
             }
         }
         return result.count >= 2 ? result : []
+    }
+}
+
+/// Formatting for reading time.
+enum ReadingTime {
+    /// A running clock: "15:08" or "1:02:45".
+    static func clock(_ seconds: Double) -> String {
+        let total = max(Int(seconds), 0)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%d:%02d", minutes, secs)
+    }
+
+    /// A rounded total: "2h 15m", "15m" or "under a minute".
+    static func words(_ seconds: Double) -> String {
+        let total = max(Int(seconds), 0)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        if minutes > 0 { return "\(minutes)m" }
+        return "under a minute"
     }
 }

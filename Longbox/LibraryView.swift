@@ -62,6 +62,10 @@ struct LibraryView: View {
         let pages = store.books.reduce(0) { $0 + ($1.isStarted ? $1.currentPage + 1 : 0) }
         let comics = count == 1 ? "1 COMIC" : "\(count) COMICS"
         let read = pages == 1 ? "1 PAGE READ" : "\(pages) PAGES READ"
+        let seconds = store.books.reduce(0.0) { $0 + ($1.secondsRead ?? 0) }
+        if seconds >= 60 {
+            return comics + "  •  " + read + "  •  " + ReadingTime.words(seconds).uppercased() + " READING"
+        }
         return comics + "  •  " + read
     }
 
@@ -218,6 +222,8 @@ struct LibraryView: View {
                         .kerning(0.5)
                         .monospacedDigit()
                         .foregroundColor(Theme.paper.opacity(0.7))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
             }
             Spacer(minLength: 0)
