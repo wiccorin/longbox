@@ -10,7 +10,8 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var readingDays: Set<String> = []
 
     private let saveQueue = DispatchQueue(label: "longbox.library.save", qos: .utility)
-    private var pending: [(url: URL, fromDropFolder: Bool)] = []
+    private var pending: [(url: URL, fromDropFolder: Bool, folderName: String?)] = []
+    @Published private(set) var folders: [ComicFolder] = []
     private var currentImportPath: String?
     private var importing = false
 
@@ -25,6 +26,116 @@ final class LibraryStore: ObservableObject {
         Storage.prepare()
         load()
         readingDays = Set(UserDefaults.standard.stringArray(forKey: "readingDays") ?? [])
+        if let data = try? Data(contentsOf: Storage.foldersFile),
+           let saved = try? JSONDecoder().decode([ComicFolder].self, from: data) {
+            folders = saved
+        }
+    }
+
+    // MARK: Folders
+
+    var sortedFolders: [ComicFolder] {
+        folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func folder(_ id: UUID) -> ComicFolder? {
+        folders.first { $0.id == id }
+    }
+
+    func books(in folderID: UUID) -> [Book] {
+        books
+            .filter { ($0.folderIDs ?? []).contains(folderID) }
+            .sorted { a, b in
+                let left = a.seriesKey ?? a.title.lowercased()
+                let right = b.seriesKey ?? b.title.lowercased()
+                if left != right { return left.localizedStandardCompare(right) == .orderedAscending }
+                let leftNumber = a.number ?? Double.greatestFiniteMagnitude
+                let rightNumber = b.number ?? Double.greatestFiniteMagnitude
+                if leftNumber != rightNumber { return leftNumber < rightNumber }
+                return a.title.localizedStandardCompare(b.title) == .orderedAscending
+            }
+    }
+
+    /// Makes a folder, or returns the one that already has this name.
+    @discardableResult
+    func createFolder(named name: String) -> ComicFolder? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let existing = folders.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return existing
+        }
+        let folder = ComicFolder(id: UUID(), name: trimmed, createdAt: Date())
+        folders.append(folder)
+        saveFolders()
+        return folder
+    }
+
+    func renameFolder(_ id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = folders.firstIndex(where: { $0.id == id }) else { return }
+        folders[index].name = trimmed
+        saveFolders()
+    }
+
+    /// Removes the folder. The comics in it stay in the box.
+    func deleteFolder(_ id: UUID) {
+        folders.removeAll { $0.id == id }
+        saveFolders()
+        var changed = false
+        for index in books.indices {
+            if var ids = books[index].folderIDs, ids.contains(id) {
+                ids.removeAll { $0 == id }
+                books[index].folderIDs = ids.isEmpty ? nil : ids
+                changed = true
+            }
+        }
+        if changed { save() }
+    }
+
+    /// True when every one of these comics is already in the folder.
+    func allIn(_ bookIDs: [UUID], folder folderID: UUID) -> Bool {
+        let wanted = Set(bookIDs)
+        let members = books.filter { wanted.contains($0.id) }
+        return !members.isEmpty && members.allSatisfy { ($0.folderIDs ?? []).contains(folderID) }
+    }
+
+    func add(_ bookIDs: [UUID], to folderID: UUID) {
+        let wanted = Set(bookIDs)
+        for index in books.indices where wanted.contains(books[index].id) {
+            var ids = books[index].folderIDs ?? []
+            if !ids.contains(folderID) {
+                ids.append(folderID)
+                books[index].folderIDs = ids
+            }
+        }
+        save()
+    }
+
+    func remove(_ bookIDs: [UUID], from folderID: UUID) {
+        let wanted = Set(bookIDs)
+        for index in books.indices where wanted.contains(books[index].id) {
+            guard var ids = books[index].folderIDs else { continue }
+            ids.removeAll { $0 == folderID }
+            books[index].folderIDs = ids.isEmpty ? nil : ids
+        }
+        save()
+    }
+
+    /// Adds the comics to the folder, or takes them out if they're all in it already.
+    func toggle(_ bookIDs: [UUID], in folderID: UUID) {
+        if allIn(bookIDs, folder: folderID) {
+            remove(bookIDs, from: folderID)
+        } else {
+            add(bookIDs, to: folderID)
+        }
+    }
+
+    private func saveFolders() {
+        guard let data = try? JSONEncoder().encode(folders) else { return }
+        let file = Storage.foldersFile
+        saveQueue.async {
+            try? data.write(to: file, options: .atomic)
+        }
     }
 
     func book(_ id: UUID) -> Book? {
@@ -50,23 +161,24 @@ final class LibraryStore: ObservableObject {
     // MARK: Import
 
     func importFiles(_ urls: [URL]) {
-        enqueue(urls.map { ($0, false) })
+        enqueue(urls.map { ($0, false, nil) })
     }
 
     /// Picks up comics dropped into the Longbox folder (Files app, or USB from a computer).
+    /// Files inside a subfolder also go into an app folder with that subfolder's name.
     func scanDropFolder() {
         let fm = FileManager.default
-        let folder = Storage.dropFolder
+        let root = Storage.dropFolder
         Storage.prepareDropFolder()
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .contentModificationDateKey]
 
-        var candidates: [URL] = []
-        for directory in [folder, folder.appendingPathComponent("Inbox", isDirectory: true)] {
-            let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
+        func comics(in directory: URL) -> [URL] {
             guard let items = try? fm.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: keys,
                 options: [.skipsHiddenFiles]
-            ) else { continue }
+            ) else { return [] }
+            var found: [URL] = []
             for url in items {
                 guard ["cbz", "cbr", "zip", "rar"].contains(url.pathExtension.lowercased()) else { continue }
                 let values = try? url.resourceValues(forKeys: Set(keys))
@@ -75,19 +187,49 @@ final class LibraryStore: ObservableObject {
                 if let modified = values?.contentModificationDate, Date().timeIntervalSince(modified) < 3 {
                     continue
                 }
-                candidates.append(url)
+                found.append(url)
+            }
+            return found.sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
             }
         }
-        candidates.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-        enqueue(candidates.map { ($0, true) })
+
+        var queue: [(URL, Bool, String?)] = []
+        for url in comics(in: root) + comics(in: root.appendingPathComponent("Inbox", isDirectory: true)) {
+            queue.append((url, true, nil))
+        }
+
+        let subfolders = (try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        for directory in subfolders {
+            let values = try? directory.resourceValues(forKeys: Set(keys))
+            guard values?.isDirectory == true else { continue }
+            let name = directory.lastPathComponent
+            if name == "Inbox" || name == "Not imported" { continue }
+            let inside = comics(in: directory)
+            if inside.isEmpty {
+                // Tidy up subfolders that have been fully imported.
+                if let rest = try? fm.contentsOfDirectory(atPath: directory.path), rest.isEmpty {
+                    try? fm.removeItem(at: directory)
+                }
+                continue
+            }
+            for url in inside {
+                queue.append((url, true, name))
+            }
+        }
+        enqueue(queue)
     }
 
-    private func enqueue(_ items: [(URL, Bool)]) {
+    private func enqueue(_ items: [(URL, Bool, String?)]) {
         for item in items {
             let path = Storage.canonicalPath(item.0)
             if path == currentImportPath { continue }
             if pending.contains(where: { Storage.canonicalPath($0.url) == path }) { continue }
-            pending.append((item.0, item.1))
+            pending.append((item.0, item.1, item.2))
         }
         runImports()
     }
@@ -103,9 +245,12 @@ final class LibraryStore: ObservableObject {
                 currentImportPath = Storage.canonicalPath(url)
                 importingName = url.deletingPathExtension().lastPathComponent
                 do {
-                    let book = try await Task.detached(priority: .userInitiated) {
+                    var book = try await Task.detached(priority: .userInitiated) {
                         try Importer.importBook(from: url)
                     }.value
+                    if let name = item.folderName, let folder = createFolder(named: name) {
+                        book.folderIDs = [folder.id]
+                    }
                     books.append(book)
                     save()
                     if item.fromDropFolder {

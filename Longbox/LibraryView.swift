@@ -13,6 +13,10 @@ struct LibraryView: View {
     @State private var detail: Book?
     @State private var openStack: SeriesStack?
     @State private var query = ""
+    @State private var namingFolder = false
+    @State private var folderName = ""
+    /// Comics waiting to go into the folder being named.
+    @State private var folderTargets: [UUID] = []
 
     private let columns = [GridItem(.adaptive(minimum: 100, maximum: 170), spacing: 18, alignment: .top)]
 
@@ -152,6 +156,16 @@ struct LibraryView: View {
         .sheet(item: $openStack) { stack in
             SeriesView(seriesKey: stack.key, fallbackName: stack.name)
                 .environmentObject(store)
+        }
+        .alert("New folder", isPresented: $namingFolder) {
+            TextField("Folder name", text: $folderName)
+            Button("Create") {
+                if let folder = store.createFolder(named: folderName), !folderTargets.isEmpty {
+                    store.add(folderTargets, to: folder.id)
+                }
+                folderTargets = []
+            }
+            Button("Cancel", role: .cancel) { folderTargets = [] }
         }
         .fileImporter(
             isPresented: $showingPicker,
@@ -475,6 +489,7 @@ struct LibraryView: View {
             } label: {
                 Label(book.isStarted ? "Continue reading" : "Read", systemImage: "book")
             }
+            folderMenu([book.id])
             Button {
                 newTitle = book.title
                 renaming = book
@@ -539,6 +554,35 @@ struct LibraryView: View {
             }
         }
         .buttonStyle(PressDownStyle())
+        .contextMenu {
+            folderMenu(stack.books.map { $0.id })
+        }
+    }
+
+    /// "Add to folder" with a tick beside the folders these comics are already in.
+    private func folderMenu(_ ids: [UUID]) -> some View {
+        Menu {
+            ForEach(store.sortedFolders) { folder in
+                Button {
+                    store.toggle(ids, in: folder.id)
+                } label: {
+                    if store.allIn(ids, folder: folder.id) {
+                        Label(folder.name, systemImage: "checkmark")
+                    } else {
+                        Text(folder.name)
+                    }
+                }
+            }
+            Button {
+                folderTargets = ids
+                folderName = ""
+                namingFolder = true
+            } label: {
+                Label("New folder", systemImage: "folder.badge.plus")
+            }
+        } label: {
+            Label("Add to folder", systemImage: "folder")
+        }
     }
 
     private func status(_ book: Book) -> String {

@@ -43,6 +43,13 @@ struct ExtractedArchive {
     var comicInfo: Data?
 }
 
+/// A collection you make yourself. A comic can be in several.
+struct ComicFolder: Identifiable, Codable, Equatable {
+    var id: UUID
+    var name: String
+    var createdAt: Date
+}
+
 struct Book: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
@@ -63,6 +70,8 @@ struct Book: Identifiable, Codable, Equatable {
     var month: Int?
     var summary: String?
     var chapters: [Chapter]?
+    /// Folders this comic has been added to.
+    var folderIDs: [UUID]?
     /// Total time spent with this book open in the reader.
     var secondsRead: Double?
 
@@ -129,6 +138,7 @@ enum Storage {
     static var booksDir: URL { root.appendingPathComponent("Books", isDirectory: true) }
     static var coversDir: URL { root.appendingPathComponent("Covers", isDirectory: true) }
     static var libraryFile: URL { root.appendingPathComponent("library.json") }
+    static var foldersFile: URL { root.appendingPathComponent("folders.json") }
 
     static func folder(for id: UUID) -> URL {
         booksDir.appendingPathComponent(id.uuidString, isDirectory: true)
@@ -168,6 +178,7 @@ enum Storage {
         let text = """
         Put .cbz or .cbr files in this folder and open Longbox.
         Longbox adds them to your library and then removes them from here.
+        Put them inside a subfolder and they also land in a folder of that name in the app.
         Files it can't read are moved to the "Not imported" folder.
         """
         try? text.write(to: note, atomically: true, encoding: .utf8)

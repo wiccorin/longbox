@@ -11,6 +11,7 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 - Page scrubber with a thumbnail preview
 - Reading time, per comic and in total, plus a reading streak
 - Drop folder: put files in the Longbox folder (Files app, or USB from a computer) and they import on launch
+- Folders tab: make your own collections; a comic can be in several, and subfolders in the drop folder become folders
 - Series stacks: issues of one series group together in reading order, with the next issue offered when you finish
 - Trim margins, and two pages side by side in landscape
 - Panel view: step through a page panel by panel

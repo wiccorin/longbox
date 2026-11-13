@@ -7,7 +7,7 @@ struct LongboxApp: App {
 
     var body: some Scene {
         WindowGroup {
-            LibraryView()
+            RootView()
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
