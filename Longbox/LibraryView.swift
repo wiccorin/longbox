@@ -11,6 +11,7 @@ struct LibraryView: View {
     @State private var newTitle = ""
     @State private var deleting: Book?
     @State private var detail: Book?
+    @State private var openStack: SeriesStack?
     @State private var query = ""
 
     private let columns = [GridItem(.adaptive(minimum: 100, maximum: 170), spacing: 18, alignment: .top)]
@@ -21,20 +22,44 @@ struct LibraryView: View {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var sortedBooks: [Book] {
-        let books = store.books.filter { $0.matches(query) }
+    private var matches: [Book] {
+        store.books
+            .filter { $0.matches(query) }
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    /// The grid: single books, plus one stack for each series with two or more issues.
+    private var items: [LibraryItem] {
+        var groups: [String: [Book]] = [:]
+        for book in store.books {
+            if let key = book.seriesKey {
+                groups[key, default: []].append(book)
+            }
+        }
+        var result: [LibraryItem] = []
+        var stacked = Set<String>()
+        for book in store.books {
+            if let key = book.seriesKey, let group = groups[key], group.count >= 2 {
+                if stacked.insert(key).inserted {
+                    result.append(.stack(SeriesStack(key: key, books: SeriesOrder.sorted(group))))
+                }
+            } else {
+                result.append(.single(book))
+            }
+        }
+
         switch sort {
         case "title":
-            return books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+            return result.sorted { $0.sortTitle.localizedStandardCompare($1.sortTitle) == .orderedAscending }
         case "added":
-            return books.sorted { $0.addedAt > $1.addedAt }
+            return result.sorted { $0.addedAt > $1.addedAt }
         case "releaseNew":
-            // Books with no known date go last.
-            return books.sorted { ($0.releaseKey ?? Int.min) > ($1.releaseKey ?? Int.min) }
+            // Anything with no known date goes last.
+            return result.sorted { ($0.releaseKey ?? Int.min) > ($1.releaseKey ?? Int.min) }
         case "releaseOld":
-            return books.sorted { ($0.releaseKey ?? Int.max) < ($1.releaseKey ?? Int.max) }
+            return result.sorted { ($0.releaseKey ?? Int.max) < ($1.releaseKey ?? Int.max) }
         default:
-            return books.sorted { ($0.lastReadAt ?? $0.addedAt) > ($1.lastReadAt ?? $1.addedAt) }
+            return result.sorted { $0.activity > $1.activity }
         }
     }
 
@@ -84,20 +109,7 @@ struct LibraryView: View {
                         emptyState
                     } else if isSearching {
                         searchField
-                        VStack(alignment: .leading, spacing: 16) {
-                            CaptionBox(text: sortedBooks.count == 1 ? "1 match" : "\(sortedBooks.count) matches")
-                            if sortedBooks.isEmpty {
-                                Text("Nothing in the box matches that. Search looks at title, series, author, publisher and year.")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundColor(Theme.paper.opacity(0.7))
-                            } else {
-                                LazyVGrid(columns: columns, spacing: 22) {
-                                    ForEach(sortedBooks) { book in
-                                        cell(book)
-                                    }
-                                }
-                            }
-                        }
+                        searchResults
                     } else {
                         searchField
                         if let book = continueBook {
@@ -112,8 +124,13 @@ struct LibraryView: View {
                         VStack(alignment: .leading, spacing: 16) {
                             CaptionBox(text: "The whole box")
                             LazyVGrid(columns: columns, spacing: 22) {
-                                ForEach(sortedBooks) { book in
-                                    cell(book)
+                                ForEach(items) { item in
+                                    switch item {
+                                    case .single(let book):
+                                        cell(book)
+                                    case .stack(let stack):
+                                        stackCell(stack)
+                                    }
                                 }
                             }
                         }
@@ -125,8 +142,15 @@ struct LibraryView: View {
             }
             .scrollDismissesKeyboard(.immediately)
         }
+        .task {
+            store.scanDropFolder()
+        }
         .sheet(item: $detail) { book in
             BookDetailView(bookID: book.id)
+                .environmentObject(store)
+        }
+        .sheet(item: $openStack) { stack in
+            SeriesView(seriesKey: stack.key, fallbackName: stack.name)
                 .environmentObject(store)
         }
         .fileImporter(
@@ -139,7 +163,7 @@ struct LibraryView: View {
             }
         }
         .fullScreenCover(item: $reading) { book in
-            ReaderView(bookID: book.id)
+            ReaderHost(bookID: book.id)
                 .environmentObject(store)
         }
         .overlay(alignment: .bottom) {
@@ -150,8 +174,8 @@ struct LibraryView: View {
                     Text("ADDING \(name.uppercased())")
                         .font(Theme.caption(12))
                         .italic()
-                        .lineLimit(1)
                         .foregroundColor(.black)
+                        .lineLimit(1)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -209,7 +233,7 @@ struct LibraryView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("LONGBOX")
                     .font(Theme.display(50))
                     .foregroundColor(Theme.yellow)
@@ -224,6 +248,10 @@ struct LibraryView: View {
                         .foregroundColor(Theme.paper.opacity(0.7))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
+                }
+                if store.streak >= 2 {
+                    CaptionBox(text: "\(store.streak)-day streak", fill: Theme.red, shadow: .black, size: 11)
+                        .padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)
@@ -286,6 +314,24 @@ struct LibraryView: View {
         .padding(.trailing, 4)
     }
 
+    private var searchResults: some View {
+        let found = matches
+        return VStack(alignment: .leading, spacing: 16) {
+            CaptionBox(text: found.count == 1 ? "1 match" : "\(found.count) matches")
+            if found.isEmpty {
+                Text("Nothing in the box matches that. Search looks at title, series, author, publisher and year.")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(Theme.paper.opacity(0.7))
+            } else {
+                LazyVGrid(columns: columns, spacing: 22) {
+                    ForEach(found) { book in
+                        cell(book)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Empty state
 
     private var emptyState: some View {
@@ -294,7 +340,7 @@ struct LibraryView: View {
                 Text("THE BOX IS EMPTY!")
                     .font(Theme.display(32))
                     .foregroundColor(.black)
-                Text("Add .cbz or .cbr files from the Files app. Longbox keeps its own copy and remembers your page.")
+                Text("Add .cbz or .cbr files with the button below, or drop them in the Longbox folder in the Files app or from your computer over USB.")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(Color.black.opacity(0.78))
                     .multilineTextAlignment(.center)
@@ -448,6 +494,51 @@ struct LibraryView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+
+    /// A series shown as a pile: the next issue on top, two more peeking out behind.
+    private func stackCell(_ stack: SeriesStack) -> some View {
+        Button {
+            openStack = stack
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack {
+                    Rectangle()
+                        .fill(Theme.panel)
+                        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                        .inkPanel(stroke: Theme.paper.opacity(0.7), shadow: .black)
+                        .rotationEffect(.degrees(5))
+                        .offset(x: 6, y: -3)
+                    Rectangle()
+                        .fill(Theme.panel)
+                        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                        .inkPanel(stroke: Theme.paper.opacity(0.85), shadow: .black)
+                        .rotationEffect(.degrees(-3))
+                        .offset(x: -2, y: -1)
+                    if let top = stack.upNext {
+                        CoverView(id: top.id)
+                            .inkPanel(stroke: Theme.paper, shadow: .black)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    CaptionBox(text: "\(stack.books.count) issues", shadow: .black, size: 10)
+                        .offset(x: -4, y: 6)
+                }
+                .padding(.bottom, 4)
+
+                Text(stack.name)
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(Theme.paper)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text("\(stack.readCount) OF \(stack.books.count) READ")
+                    .font(Theme.caption(10))
+                    .kerning(0.4)
+                    .monospacedDigit()
+                    .foregroundColor(Theme.paper.opacity(0.6))
+            }
+        }
+        .buttonStyle(PressDownStyle())
     }
 
     private func status(_ book: Book) -> String {

@@ -55,6 +55,8 @@ struct Book: Identifiable, Codable, Equatable {
 
     // Details. All optional so libraries saved by older builds still load.
     var series: String?
+    /// Issue or volume number within the series.
+    var number: Double?
     var writer: String?
     var publisher: String?
     var year: Int?
@@ -146,6 +148,42 @@ enum Storage {
         for dir in [root, booksDir, coversDir] {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
+        prepareDropFolder()
+    }
+
+    /// The folder people can see: "Longbox" in the Files app, and over USB from a computer.
+    static var dropFolder: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    /// One spelling of a file's path, so the same file is never queued twice.
+    static func canonicalPath(_ url: URL) -> String {
+        url.resolvingSymlinksInPath().path
+    }
+
+    /// Keeps a note in the drop folder, which also makes the folder show up in Files.
+    static func prepareDropFolder() {
+        let note = dropFolder.appendingPathComponent("Drop comics here.txt")
+        guard !FileManager.default.fileExists(atPath: note.path) else { return }
+        let text = """
+        Put .cbz or .cbr files in this folder and open Longbox.
+        Longbox adds them to your library and then removes them from here.
+        Files it can't read are moved to the "Not imported" folder.
+        """
+        try? text.write(to: note, atomically: true, encoding: .utf8)
+    }
+
+    /// Moves a file that failed to import out of the way so it isn't tried again.
+    static func setAside(_ url: URL) {
+        let fm = FileManager.default
+        let folder = dropFolder.appendingPathComponent("Not imported", isDirectory: true)
+        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        var target = folder.appendingPathComponent(url.lastPathComponent)
+        if fm.fileExists(atPath: target.path) {
+            let name = url.deletingPathExtension().lastPathComponent + " " + String(UUID().uuidString.prefix(6))
+            target = folder.appendingPathComponent(name).appendingPathExtension(url.pathExtension)
+        }
+        try? fm.moveItem(at: url, to: target)
     }
 }
 

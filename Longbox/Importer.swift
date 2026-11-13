@@ -68,10 +68,17 @@ enum Importer {
                 lastReadAt: nil
             )
             book.year = TitleParser.year(in: rawName)
+            if let parsed = TitleParser.seriesAndNumber(in: rawName) {
+                book.series = parsed.series
+                book.number = parsed.number
+            }
 
             var chapters = TitleParser.chapters(fromFolders: extracted.folders)
             if let data = extracted.comicInfo, let info = ComicInfoParser.parse(data) {
-                book.series = info.series
+                if let series = info.series {
+                    book.series = series
+                    book.number = info.number ?? book.number
+                }
                 book.writer = info.writer
                 book.publisher = info.publisher
                 book.summary = info.summary

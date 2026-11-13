@@ -36,7 +36,7 @@ struct BookDetailView: View {
         }
         .presentationDragIndicator(.visible)
         .fullScreenCover(isPresented: $reading) {
-            ReaderView(bookID: bookID)
+            ReaderHost(bookID: bookID)
                 .environmentObject(store)
         }
         .sheet(isPresented: $editing) {
@@ -126,7 +126,7 @@ struct BookDetailView: View {
             fact("Publisher", book.publisher)
             fact("Released", book.releaseText)
             if let series = book.series, !series.isEmpty {
-                fact("Series", series)
+                fact("Series", book.numberText.map { "\(series) #\($0)" } ?? series)
             }
             fact("Length", "\(book.pageCount) pages")
             fact("Time read", (book.secondsRead ?? 0) > 0 ? ReadingTime.words(book.secondsRead ?? 0) : "None yet")
@@ -289,6 +289,7 @@ struct EditDetailsView: View {
     @State private var writer = ""
     @State private var publisher = ""
     @State private var series = ""
+    @State private var number = ""
     @State private var year = ""
     @State private var month = 0
     @State private var summary = ""
@@ -303,6 +304,8 @@ struct EditDetailsView: View {
                     TextField("Author", text: $writer)
                     TextField("Publisher", text: $publisher)
                     TextField("Series", text: $series)
+                    TextField("Issue number", text: $number)
+                        .keyboardType(.decimalPad)
                     TextField("Year", text: $year)
                         .keyboardType(.numberPad)
                     Picker("Month", selection: $month) {
@@ -338,6 +341,7 @@ struct EditDetailsView: View {
             writer = book.writer ?? ""
             publisher = book.publisher ?? ""
             series = book.series ?? ""
+            number = book.numberText ?? ""
             year = book.year.map { String($0) } ?? ""
             month = book.month ?? 0
             summary = book.summary ?? ""
@@ -354,6 +358,7 @@ struct EditDetailsView: View {
         let newWriter = clean(writer)
         let newPublisher = clean(publisher)
         let newSeries = clean(series)
+        let newNumber = Double(number.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: "."))
         let newYear = Int(year.trimmingCharacters(in: .whitespacesAndNewlines))
         let newMonth = month == 0 ? nil : month
         let newSummary = clean(summary)
@@ -362,6 +367,7 @@ struct EditDetailsView: View {
             book.writer = newWriter
             book.publisher = newPublisher
             book.series = newSeries
+            book.number = newSeries == nil ? nil : newNumber
             book.year = newYear
             book.month = newYear == nil ? nil : newMonth
             book.summary = newSummary

@@ -9,7 +9,11 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 - Three reading modes per book: left to right, right to left (manga), vertical scroll
 - Tap the edges to turn pages, tap the middle for controls, pinch or double-tap to zoom in every mode
 - Page scrubber with a thumbnail preview
-- Reading time, per comic and in total
+- Reading time, per comic and in total, plus a reading streak
+- Drop folder: put files in the Longbox folder (Files app, or USB from a computer) and they import on launch
+- Series stacks: issues of one series group together in reading order, with the next issue offered when you finish
+- Trim margins, and two pages side by side in landscape
+- Panel view: step through a page panel by panel
 - Search, sort by release date, and a details screen with author, publisher, year, description and chapters
 - Reads details and chapters from `ComicInfo.xml` and folders inside the file; you can also mark your own chapters
 - Your comics stay on the device. The only network use is the optional "Find details" lookup, which sends your search text to Google Books.
@@ -22,6 +26,10 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 4. Drag `Longbox.ipa` into Sideloadly, enter your Apple ID, and press Start.
 5. On the iPhone: Settings > General > VPN & Device Management, trust your Apple ID.
 6. On iOS 16 or later: Settings > Privacy & Security > Developer Mode, turn it on and restart.
+
+## Adding comics from a PC
+
+Plug in the iPhone, open Apple Devices (or iTunes) on Windows, pick the phone, go to Files, and drag .cbz or .cbr files onto Longbox. They import the next time Longbox opens.
 
 With a free Apple ID the app stops opening after 7 days. Run Sideloadly again to refresh it; your library is kept.
 

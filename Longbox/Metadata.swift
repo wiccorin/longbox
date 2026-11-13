@@ -11,6 +11,7 @@ struct ComicInfo {
     var manga: String?
     var year: Int?
     var month: Int?
+    var number: Double?
     var bookmarks: [Chapter] = []
 }
 
@@ -70,6 +71,7 @@ final class ComicInfoParser: NSObject, XMLParserDelegate {
         case "Manga": info.manga = value
         case "Year": info.year = Int(value)
         case "Month": info.month = Int(value)
+        case "Number": info.number = Double(value)
         default: break
         }
     }

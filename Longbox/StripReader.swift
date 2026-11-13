@@ -4,20 +4,24 @@ import UIKit
 /// Continuous top-to-bottom reading with pinch and double-tap zoom.
 struct StripReader: UIViewRepresentable {
     let urls: [URL]
+    /// Width over height for each page as it will be shown.
     let aspects: [CGFloat]
+    let trim: Bool
     @Binding var page: Int
     let onTap: () -> Void
 
     func makeUIView(context: Context) -> StripView {
         let view = StripView()
-        view.configure(urls: urls, aspects: aspects, startPage: page)
+        view.configure(urls: urls, aspects: aspects, trim: trim, startPage: page)
         wire(view)
         return view
     }
 
     func updateUIView(_ view: StripView, context: Context) {
         wire(view)
-        if page != view.currentPage {
+        if view.aspects != aspects || view.trim != trim || view.urls != urls {
+            view.configure(urls: urls, aspects: aspects, trim: trim, startPage: page)
+        } else if page != view.currentPage {
             view.scroll(to: page)
         }
     }
@@ -39,11 +43,13 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
     var onPage: ((Int) -> Void)?
     var onTap: (() -> Void)?
     private(set) var currentPage = 0
+    private(set) var urls: [URL] = []
+    private(set) var aspects: [CGFloat] = []
+    private(set) var trim = false
 
-    private var urls: [URL] = []
-    private var aspects: [CGFloat] = []
     /// Top edge of each page in unzoomed points, plus one final entry for the bottom.
     private var tops: [CGFloat] = [0]
+    private var heights: [CGFloat] = []
     private let content = UIView()
     private var live: [Int: UIImageView] = [:]
     private var loads: [Int: Task<Void, Never>] = [:]
@@ -75,9 +81,10 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
         fatalError("init(coder:) is not supported")
     }
 
-    func configure(urls: [URL], aspects: [CGFloat], startPage: Int) {
+    func configure(urls: [URL], aspects: [CGFloat], trim: Bool, startPage: Int) {
         self.urls = urls
         self.aspects = aspects
+        self.trim = trim
         currentPage = min(max(startPage, 0), max(urls.count - 1, 0))
         laidOutWidth = 0
         setNeedsLayout()
@@ -99,15 +106,23 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
             setZoomScale(1, animated: false)
         }
 
+        // Trimmed pages lose their own margins, so leave a little air between them.
+        let gap: CGFloat = trim ? 6 : 0
         var running: CGFloat = 0
-        var newTops: [CGFloat] = [0]
+        var newTops: [CGFloat] = []
+        var newHeights: [CGFloat] = []
         newTops.reserveCapacity(urls.count + 1)
+        newHeights.reserveCapacity(urls.count)
         for index in urls.indices {
             let aspect = index < aspects.count && aspects[index] > 0.01 ? aspects[index] : 0.66
-            running += (width / aspect).rounded()
+            let height = (width / aspect).rounded()
             newTops.append(running)
+            newHeights.append(height)
+            running += height + (index < urls.count - 1 ? gap : 0)
         }
+        newTops.append(running)
         tops = newTops
+        heights = newHeights
 
         for (_, view) in live { view.removeFromSuperview() }
         live.removeAll()
@@ -169,7 +184,7 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
     }
 
     private func addPage(_ index: Int) {
-        let frame = CGRect(x: 0, y: tops[index], width: laidOutWidth, height: tops[index + 1] - tops[index])
+        let frame = CGRect(x: 0, y: tops[index], width: laidOutWidth, height: heights[index])
         let imageView = UIImageView(frame: frame)
         imageView.contentMode = .scaleAspectFit
         imageView.backgroundColor = .black
@@ -177,8 +192,9 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
         live[index] = imageView
 
         let url = urls[index]
+        let useTrim = trim
         loads[index] = Task { [weak self, weak imageView] in
-            let image = await PageImage.page(url)
+            let image = await PageImage.page(url, trim: useTrim)
             guard !Task.isCancelled, let self, let imageView else { return }
             if self.live[index] === imageView {
                 imageView.image = image
@@ -189,7 +205,11 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
     private func reportPage() {
         guard !silent, !urls.isEmpty, tops.count == urls.count + 1 else { return }
         let visible = content.convert(bounds, from: self)
-        let page = index(atY: max(visible.minY + visible.height * 0.3, 0))
+        var page = index(atY: max(visible.minY + visible.height * 0.3, 0))
+        // At the very bottom the last page counts as reached, even if it is short.
+        if visible.maxY >= content.bounds.height - 2 {
+            page = urls.count - 1
+        }
         if page != currentPage {
             currentPage = page
             onPage?(page)

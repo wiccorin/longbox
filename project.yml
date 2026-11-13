@@ -31,7 +31,8 @@ targets:
         UILaunchScreen: {}
         UIAppFonts:
           - Bangers-Regular.ttf
-        LSSupportsOpeningDocumentsInPlace: false
+        LSSupportsOpeningDocumentsInPlace: true
+        UIFileSharingEnabled: true
         ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
