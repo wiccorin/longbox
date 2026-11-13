@@ -1,0 +1,73 @@
+name: Longbox
+options:
+  bundleIdPrefix: com.wiccorin
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: "0.9.19"
+  Unrar:
+    url: https://github.com/mtgto/Unrar.swift
+    from: "0.5.4"
+targets:
+  Longbox:
+    type: application
+    platform: iOS
+    sources:
+      - Longbox
+    dependencies:
+      - package: ZIPFoundation
+        product: ZIPFoundation
+      - package: Unrar
+        product: Unrar
+    scheme: {}
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: Longbox
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        LSSupportsOpeningDocumentsInPlace: false
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Comic Book Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.wiccorin.longbox.cbz
+              - com.wiccorin.longbox.cbr
+              - public.zip-archive
+              - com.rarlab.rar-archive
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.wiccorin.longbox.cbz
+            UTTypeDescription: Comic Book Zip Archive
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - cbz
+          - UTTypeIdentifier: com.wiccorin.longbox.cbr
+            UTTypeDescription: Comic Book RAR Archive
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - cbr
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiccorin.longbox
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_BITCODE: "NO"
