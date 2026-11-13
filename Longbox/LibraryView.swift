@@ -10,19 +10,31 @@ struct LibraryView: View {
     @State private var renaming: Book?
     @State private var newTitle = ""
     @State private var deleting: Book?
+    @State private var detail: Book?
+    @State private var query = ""
 
     private let columns = [GridItem(.adaptive(minimum: 100, maximum: 170), spacing: 18, alignment: .top)]
 
     // MARK: Derived lists
 
+    private var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var sortedBooks: [Book] {
+        let books = store.books.filter { $0.matches(query) }
         switch sort {
         case "title":
-            return store.books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+            return books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         case "added":
-            return store.books.sorted { $0.addedAt > $1.addedAt }
+            return books.sorted { $0.addedAt > $1.addedAt }
+        case "releaseNew":
+            // Books with no known date go last.
+            return books.sorted { ($0.releaseKey ?? Int.min) > ($1.releaseKey ?? Int.min) }
+        case "releaseOld":
+            return books.sorted { ($0.releaseKey ?? Int.max) < ($1.releaseKey ?? Int.max) }
         default:
-            return store.books.sorted { ($0.lastReadAt ?? $0.addedAt) > ($1.lastReadAt ?? $1.addedAt) }
+            return books.sorted { ($0.lastReadAt ?? $0.addedAt) > ($1.lastReadAt ?? $1.addedAt) }
         }
     }
 
@@ -66,7 +78,24 @@ struct LibraryView: View {
 
                     if store.books.isEmpty {
                         emptyState
+                    } else if isSearching {
+                        searchField
+                        VStack(alignment: .leading, spacing: 16) {
+                            CaptionBox(text: sortedBooks.count == 1 ? "1 match" : "\(sortedBooks.count) matches")
+                            if sortedBooks.isEmpty {
+                                Text("Nothing in the box matches that. Search looks at title, series, author, publisher and year.")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(Theme.paper.opacity(0.7))
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 22) {
+                                    ForEach(sortedBooks) { book in
+                                        cell(book)
+                                    }
+                                }
+                            }
+                        }
                     } else {
+                        searchField
                         if let book = continueBook {
                             hero(book)
                         }
@@ -90,6 +119,11 @@ struct LibraryView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 40)
             }
+            .scrollDismissesKeyboard(.immediately)
+        }
+        .sheet(item: $detail) { book in
+            BookDetailView(bookID: book.id)
+                .environmentObject(store)
         }
         .fileImporter(
             isPresented: $showingPicker,
@@ -192,6 +226,8 @@ struct LibraryView: View {
                     Text("Recently read").tag("recent")
                     Text("Recently added").tag("added")
                     Text("Title").tag("title")
+                    Text("Release date, newest first").tag("releaseNew")
+                    Text("Release date, oldest first").tag("releaseOld")
                 }
             } label: {
                 RoundIcon(systemName: "arrow.up.arrow.down")
@@ -206,6 +242,42 @@ struct LibraryView: View {
             .buttonStyle(PressDownStyle())
             .accessibilityLabel("Add comics")
         }
+    }
+
+    // MARK: Search
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .black))
+                .foregroundColor(.black)
+            TextField(
+                "",
+                text: $query,
+                prompt: Text("Search title, author, publisher").foregroundColor(Color.black.opacity(0.45))
+            )
+            .font(.subheadline.weight(.semibold))
+            .foregroundColor(.black)
+            .tint(Theme.red)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .submitLabel(.search)
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(Color.black.opacity(0.6))
+                }
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Theme.paper)
+        .overlay(Rectangle().strokeBorder(Color.black, lineWidth: 2.5))
+        .background(Rectangle().fill(Theme.cyan).offset(x: 4, y: 4))
+        .padding(.trailing, 4)
     }
 
     // MARK: Empty state
@@ -305,7 +377,7 @@ struct LibraryView: View {
 
     private func cell(_ book: Book) -> some View {
         Button {
-            reading = book
+            detail = book
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 CoverView(id: book.id)
@@ -347,6 +419,11 @@ struct LibraryView: View {
         .buttonStyle(PressDownStyle())
         .contextMenu {
             Button {
+                reading = book
+            } label: {
+                Label(book.isStarted ? "Continue reading" : "Read", systemImage: "book")
+            }
+            Button {
                 newTitle = book.title
                 renaming = book
             } label: {
@@ -370,6 +447,7 @@ struct LibraryView: View {
     private func status(_ book: Book) -> String {
         if book.isFinished { return "FINISHED" }
         if book.isStarted { return "PAGE \(book.currentPage + 1) OF \(book.pageCount)" }
+        if let year = book.year { return "\(String(year))  •  \(book.pageCount) PAGES" }
         return "\(book.pageCount) PAGES"
     }
 }

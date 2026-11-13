@@ -73,6 +73,35 @@ final class LibraryStore: ObservableObject {
         save()
     }
 
+    /// Applies any edit to a book's details and saves.
+    func update(_ id: UUID, _ change: (inout Book) -> Void) {
+        guard let index = books.firstIndex(where: { $0.id == id }) else { return }
+        change(&books[index])
+        save()
+    }
+
+    /// Marks a chapter start. The first marker also adds one at page 1 so nothing is left uncovered.
+    func addChapter(at page: Int, for id: UUID) {
+        update(id) { book in
+            var list = book.chapters ?? []
+            guard !list.contains(where: { $0.startPage == page }) else { return }
+            if list.isEmpty && page > 0 {
+                list.append(Chapter(title: "", startPage: 0))
+            }
+            list.append(Chapter(title: "", startPage: page))
+            list.sort { $0.startPage < $1.startPage }
+            book.chapters = list
+        }
+    }
+
+    func removeChapter(startPage: Int, for id: UUID) {
+        update(id) { book in
+            var list = book.chapters ?? []
+            list.removeAll { $0.startPage == startPage }
+            book.chapters = list.isEmpty ? nil : list
+        }
+    }
+
     func delete(_ id: UUID) {
         books.removeAll { $0.id == id }
         try? FileManager.default.removeItem(at: Storage.folder(for: id))
@@ -87,6 +116,16 @@ final class LibraryStore: ObservableObject {
               let saved = try? JSONDecoder().decode([Book].self, from: data)
         else { return }
         books = saved
+
+        // Libraries from earlier builds have no release year; recover it from the title.
+        var changed = false
+        for index in books.indices where books[index].year == nil {
+            if let year = TitleParser.year(in: books[index].title) {
+                books[index].year = year
+                changed = true
+            }
+        }
+        if changed { save() }
     }
 
     private func save() {

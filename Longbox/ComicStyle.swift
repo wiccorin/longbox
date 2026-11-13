@@ -131,14 +131,16 @@ struct ComicPill: View {
 struct ComicButtonStyle: ButtonStyle {
     var fill: Color = Theme.yellow
     var shadow: Color = Theme.red
+    var textColor: Color = .black
+    var size: CGFloat = 24
 
     func makeBody(configuration: Configuration) -> some View {
         let down = configuration.isPressed
         return configuration.label
-            .font(Theme.display(24))
-            .foregroundColor(.black)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 9)
+            .font(Theme.display(size))
+            .foregroundColor(textColor)
+            .padding(.horizontal, size)
+            .padding(.vertical, size * 0.375)
             .background(RoundedRectangle(cornerRadius: 6).fill(fill))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.black, lineWidth: 2.5))
             .background(

@@ -43,11 +43,12 @@ enum Importer {
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
 
         do {
-            let pages: [String]
+            let extracted: ExtractedArchive
             switch format {
-            case .zip: pages = try ZipExtractor.extract(archive: temp, to: folder)
-            case .rar: pages = try RarExtractor.extract(archive: temp, to: folder)
+            case .zip: extracted = try ZipExtractor.extract(archive: temp, to: folder)
+            case .rar: extracted = try RarExtractor.extract(archive: temp, to: folder)
             }
+            let pages = extracted.pages
             guard !pages.isEmpty else { throw ImportError.noPages }
 
             let first = folder.appendingPathComponent(pages[0])
@@ -56,15 +57,32 @@ enum Importer {
                 try? jpeg.write(to: Storage.cover(for: id))
             }
 
-            return Book(
+            let rawName = source.deletingPathExtension().lastPathComponent
+            var book = Book(
                 id: id,
-                title: source.deletingPathExtension().lastPathComponent,
+                title: TitleParser.clean(rawName),
                 pages: pages,
                 currentPage: 0,
                 mode: .leftToRight,
                 addedAt: Date(),
                 lastReadAt: nil
             )
+            book.year = TitleParser.year(in: rawName)
+
+            var chapters = TitleParser.chapters(fromFolders: extracted.folders)
+            if let data = extracted.comicInfo, let info = ComicInfoParser.parse(data) {
+                book.series = info.series
+                book.writer = info.writer
+                book.publisher = info.publisher
+                book.summary = info.summary
+                if let year = info.year { book.year = year }
+                book.month = info.month
+                if info.manga == "YesAndRightToLeft" { book.mode = .rightToLeft }
+                let marks = info.bookmarks.filter { pages.indices.contains($0.startPage) }
+                if !marks.isEmpty { chapters = marks }
+            }
+            book.chapters = chapters.isEmpty ? nil : chapters
+            return book
         } catch {
             try? fm.removeItem(at: folder)
             throw error

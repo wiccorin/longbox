@@ -139,6 +139,21 @@ struct ReaderView: View {
                         Label(mode.label, systemImage: mode.symbol).tag(mode)
                     }
                 }
+                Divider()
+                Button {
+                    store.addChapter(at: page, for: bookID)
+                } label: {
+                    Label("Mark chapter start here", systemImage: "bookmark")
+                }
+                if !book.chapterList.isEmpty {
+                    Menu("Jump to chapter") {
+                        ForEach(Array(book.chapterList.enumerated()), id: \.offset) { index, chapter in
+                            Button(chapter.displayTitle(index)) {
+                                page = chapter.startPage
+                            }
+                        }
+                    }
+                }
             } label: {
                 Image(systemName: book.mode.symbol)
                     .font(.system(size: 15, weight: .black))
