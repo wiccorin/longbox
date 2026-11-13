@@ -7,6 +7,8 @@ final class LibraryStore: ObservableObject {
     @Published var importingName: String?
     @Published var errorMessage: String?
 
+    private let saveQueue = DispatchQueue(label: "longbox.library.save", qos: .utility)
+
     init() {
         Storage.prepare()
         load()
@@ -89,6 +91,9 @@ final class LibraryStore: ObservableObject {
 
     private func save() {
         guard let data = try? JSONEncoder().encode(books) else { return }
-        try? data.write(to: Storage.libraryFile, options: .atomic)
+        let file = Storage.libraryFile
+        saveQueue.async {
+            try? data.write(to: file, options: .atomic)
+        }
     }
 }

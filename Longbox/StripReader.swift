@@ -153,7 +153,7 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
     private func tile() {
         guard !urls.isEmpty, tops.count == urls.count + 1, laidOutWidth > 0 else { return }
         let visible = content.convert(bounds, from: self)
-        let margin = visible.height * 0.75
+        let margin = visible.height * 1.6
         let first = index(atY: visible.minY - margin)
         let last = index(atY: visible.maxY + margin)
 

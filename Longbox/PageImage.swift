@@ -5,7 +5,7 @@ import ImageIO
 enum PageImage {
     private static let cache: NSCache<NSURL, UIImage> = {
         let cache = NSCache<NSURL, UIImage>()
-        cache.countLimit = 8
+        cache.totalCostLimit = 320 * 1024 * 1024
         return cache
     }()
 
@@ -69,7 +69,10 @@ enum PageImage {
         let image = await Task.detached(priority: .userInitiated) {
             downsampled(url, shortSide: 1800)
         }.value
-        if let image { cache.setObject(image, forKey: key) }
+        if let image {
+            let cost = (image.cgImage?.bytesPerRow ?? 0) * (image.cgImage?.height ?? 0)
+            cache.setObject(image, forKey: key, cost: max(cost, 1))
+        }
         return image
     }
 }

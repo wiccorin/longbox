@@ -3,6 +3,7 @@ import SwiftUI
 struct ReaderView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     let bookID: UUID
 
@@ -12,6 +13,8 @@ struct ReaderView: View {
     @State private var aspects: [CGFloat]?
     @State private var scrub: Double = 0
     @State private var scrubbing = false
+    @State private var urls: [URL] = []
+    @State private var saveTask: Task<Void, Never>?
 
     private var book: Book? { store.book(bookID) }
 
@@ -20,8 +23,6 @@ struct ReaderView: View {
             Color.black.ignoresSafeArea()
 
             if let book, ready {
-                let urls = Storage.pageURLs(for: book)
-
                 Group {
                     if book.mode == .vertical {
                         if let aspects, aspects.count == urls.count {
@@ -58,13 +59,35 @@ struct ReaderView: View {
             if !ready {
                 page = book?.currentPage ?? 0
                 scrub = Double(page)
+                if let book {
+                    urls = Storage.pageURLs(for: book)
+                }
                 ready = true
             }
         }
         .onChange(of: page) { newValue in
-            store.setPage(newValue, for: bookID)
             if !scrubbing {
                 scrub = Double(newValue)
+            }
+            // Saving on every page turn stutters the scroll, so wait for a pause.
+            saveTask?.cancel()
+            saveTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                if !Task.isCancelled {
+                    store.setPage(newValue, for: bookID)
+                }
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase != .active && ready {
+                saveTask?.cancel()
+                store.setPage(page, for: bookID)
+            }
+        }
+        .onDisappear {
+            saveTask?.cancel()
+            if ready {
+                store.setPage(page, for: bookID)
             }
         }
     }
