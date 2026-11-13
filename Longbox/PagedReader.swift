@@ -11,6 +11,8 @@ struct PagedReader: UIViewControllerRepresentable {
     let trim: Bool
     /// Step through panels instead of whole pages.
     let guided: Bool
+    /// Show only the current panel, with the rest of the page blacked out.
+    let cinematic: Bool
     @Binding var page: Int
     let onCenterTap: () -> Void
     let onPastEnd: () -> Void
@@ -49,6 +51,7 @@ struct PagedReader: UIViewControllerRepresentable {
             || old.rightToLeft != rightToLeft
             || old.trim != trim
             || old.guided != guided
+            || old.cinematic != cinematic
             || old.urls != urls
         coordinator.parent = self
 
@@ -86,6 +89,7 @@ struct PagedReader: UIViewControllerRepresentable {
                 unit: unit,
                 trim: parent.trim,
                 guided: parent.guided && pages.count == 1,
+                cinematic: parent.cinematic && pages.count == 1,
                 rightToLeft: parent.rightToLeft,
                 startAtEnd: atEnd
             )
@@ -163,6 +167,7 @@ final class PageController: UIViewController, UIScrollViewDelegate {
     let unit: Int
     let trim: Bool
     let guided: Bool
+    let cinematic: Bool
     let rightToLeft: Bool
     var onTap: ((Int) -> Void)?
 
@@ -180,11 +185,12 @@ final class PageController: UIViewController, UIScrollViewDelegate {
     private var panelIndex: Int?
     private var enteredPanels = false
 
-    init(urls: [URL], unit: Int, trim: Bool, guided: Bool, rightToLeft: Bool, startAtEnd: Bool) {
+    init(urls: [URL], unit: Int, trim: Bool, guided: Bool, cinematic: Bool, rightToLeft: Bool, startAtEnd: Bool) {
         self.urls = urls
         self.unit = unit
         self.trim = trim
         self.guided = guided
+        self.cinematic = cinematic
         self.rightToLeft = rightToLeft
         self.startAtEnd = startAtEnd
         super.init(nibName: nil, bundle: nil)
@@ -284,6 +290,8 @@ final class PageController: UIViewController, UIScrollViewDelegate {
         super.viewDidDisappear(animated)
         scrollView.setZoomScale(1, animated: false)
         panelIndex = nil
+        applyMask(nil)
+        container.alpha = 1
         enteredPanels = false
         startAtEnd = false
     }
@@ -335,7 +343,49 @@ final class PageController: UIViewController, UIScrollViewDelegate {
         zoomToPanel(index, animated: false)
     }
 
+    /// Moves to a panel. In cinematic mode the old panel fades out and the new one fades in alone.
     private func zoomToPanel(_ index: Int, animated: Bool) {
+        guard cinematic else {
+            zoomRect(index, animated: animated)
+            return
+        }
+        guard animated else {
+            applyMask(index)
+            zoomRect(index, animated: false)
+            return
+        }
+        UIView.animate(withDuration: 0.14, animations: {
+            self.container.alpha = 0
+        }, completion: { _ in
+            self.applyMask(index)
+            self.zoomRect(index, animated: false)
+            UIView.animate(withDuration: 0.24) {
+                self.container.alpha = 1
+            }
+        })
+    }
+
+    /// Hides everything on the page except one panel. Pass nil to show the whole page again.
+    private func applyMask(_ index: Int?) {
+        guard cinematic, let imageView = imageViews.first else { return }
+        guard let index, panels.indices.contains(index) else {
+            imageView.layer.mask = nil
+            return
+        }
+        let bounds = imageView.bounds
+        let panel = panels[index]
+        let rect = CGRect(
+            x: panel.minX * bounds.width,
+            y: panel.minY * bounds.height,
+            width: panel.width * bounds.width,
+            height: panel.height * bounds.height
+        )
+        let mask = CAShapeLayer()
+        mask.path = UIBezierPath(rect: rect).cgPath
+        imageView.layer.mask = mask
+    }
+
+    private func zoomRect(_ index: Int, animated: Bool) {
         guard panels.indices.contains(index), let imageView = imageViews.first else { return }
         let frame = imageView.frame
         guard frame.width > 0, frame.height > 0 else { return }
@@ -377,6 +427,7 @@ final class PageController: UIViewController, UIScrollViewDelegate {
         if scrollView.zoomScale > 1.01 {
             // Also the way out of a panel, back to the whole page.
             panelIndex = nil
+            applyMask(nil)
             scrollView.setZoomScale(1, animated: true)
             return
         }

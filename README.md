@@ -12,12 +12,16 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 - Reading time, per comic and in total, plus a reading streak
 - Drop folder: put files in the Longbox folder (Files app, or USB from a computer) and they import on launch
 - Folders tab: make your own collections; a comic can be in several, and subfolders in the drop folder become folders
+- Cinematic mode: one panel on screen at a time, fading between them
+- Pin favorites to a shelf at the top of the Box
+- Picks tab: what to read next from your box by reading time, plus optional AI recommendations using your own Anthropic API key
+- Group series: file a comic under the right series by hand
 - Series stacks: issues of one series group together in reading order, with the next issue offered when you finish
 - Trim margins, and two pages side by side in landscape
 - Panel view: step through a page panel by panel
 - Search, sort by release date, and a details screen with author, publisher, year, description and chapters
 - Reads details and chapters from `ComicInfo.xml` and folders inside the file; you can also mark your own chapters
-- Your comics stay on the device. The only network use is the optional "Find details" lookup, which sends your search text to Google Books.
+- Your comics stay on the device. Network use is optional: "Find details" sends your search text to Google Books, and AI picks send your titles, creators and reading times to Anthropic with a key you provide.
 
 ## Install from Windows
 

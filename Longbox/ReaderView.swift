@@ -23,6 +23,7 @@ struct ReaderView: View {
 
     @AppStorage("trimMargins") private var trim = false
     @AppStorage("panelView") private var guided = false
+    @AppStorage("cinematicMode") private var cinematic = false
     @AppStorage("landscapeSpreads") private var spreads = true
 
     let bookID: UUID
@@ -58,7 +59,7 @@ struct ReaderView: View {
                 Color.black.ignoresSafeArea()
 
                 if let book, ready {
-                    let paired = book.mode != .vertical && landscape && spreads && !guided
+                    let paired = book.mode != .vertical && landscape && spreads && !guided && !cinematic
                     let units = Spreads.units(count: urls.count, aspects: paired ? aspects : nil)
                     let lastStart = book.mode == .vertical ? urls.count - 1 : (units.last?.first ?? 0)
                     let atEnd = !urls.isEmpty && page >= lastStart
@@ -97,6 +98,14 @@ struct ReaderView: View {
                 }
                 ready = true
                 sessionStart = Date()
+            }
+        }
+        .onChange(of: cinematic) { on in
+            // Clear the bars away so the panel has the screen to itself.
+            if on {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    showChrome = false
+                }
             }
         }
         .onChange(of: page) { newValue in
@@ -149,7 +158,8 @@ struct ReaderView: View {
                 units: units,
                 rightToLeft: book.mode == .rightToLeft,
                 trim: trim,
-                guided: guided,
+                guided: guided || cinematic,
+                cinematic: cinematic,
                 page: $page,
                 onCenterTap: toggleChrome,
                 onPastEnd: { finish(book) }
@@ -256,6 +266,9 @@ struct ReaderView: View {
                 Divider()
                 Toggle(isOn: $guided) {
                     Label("Panel view", systemImage: "rectangle.split.2x2")
+                }
+                Toggle(isOn: $cinematic) {
+                    Label("Cinematic mode", systemImage: "film")
                 }
                 Toggle(isOn: $trim) {
                     Label("Trim margins", systemImage: "crop")

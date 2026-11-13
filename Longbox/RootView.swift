@@ -15,6 +15,10 @@ struct RootView: View {
                 .opacity(tab == 1 ? 1 : 0)
                 .allowsHitTesting(tab == 1)
                 .accessibilityHidden(tab != 1)
+            PicksView()
+                .opacity(tab == 2 ? 1 : 0)
+                .allowsHitTesting(tab == 2)
+                .accessibilityHidden(tab != 2)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bar
@@ -26,6 +30,7 @@ struct RootView: View {
         HStack(spacing: 0) {
             tabButton(0, title: "BOX", symbol: "shippingbox.fill")
             tabButton(1, title: "FOLDERS", symbol: "folder.fill")
+            tabButton(2, title: "PICKS", symbol: "sparkles")
         }
         .padding(.top, 8)
         .padding(.bottom, 2)

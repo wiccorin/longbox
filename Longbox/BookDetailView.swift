@@ -10,6 +10,7 @@ struct BookDetailView: View {
     @State private var reading = false
     @State private var editing = false
     @State private var lookingUp = false
+    @State private var grouping = false
 
     private var book: Book? { store.book(bookID) }
 
@@ -45,6 +46,10 @@ struct BookDetailView: View {
         }
         .sheet(isPresented: $lookingUp) {
             LookupView(bookID: bookID)
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $grouping) {
+            GroupSeriesView(bookID: bookID)
                 .environmentObject(store)
         }
     }
@@ -169,15 +174,27 @@ struct BookDetailView: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 16) {
-            Button("FIND DETAILS") {
-                lookingUp = true
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                Button("FIND DETAILS") {
+                    lookingUp = true
+                }
+                .buttonStyle(ComicButtonStyle(size: 18))
+                Button("EDIT") {
+                    editing = true
+                }
+                .buttonStyle(ComicButtonStyle(fill: Theme.paper, shadow: Theme.cyan, size: 18))
             }
-            .buttonStyle(ComicButtonStyle(size: 18))
-            Button("EDIT") {
-                editing = true
+            HStack(spacing: 16) {
+                Button("GROUP SERIES") {
+                    grouping = true
+                }
+                .buttonStyle(ComicButtonStyle(fill: Theme.cyan, shadow: .black, size: 18))
+                Button((book?.isPinned ?? false) ? "UNPIN" : "PIN") {
+                    store.togglePin(bookID)
+                }
+                .buttonStyle(ComicButtonStyle(fill: Theme.paper, shadow: Theme.red, size: 18))
             }
-            .buttonStyle(ComicButtonStyle(fill: Theme.paper, shadow: Theme.cyan, size: 18))
         }
     }
 

@@ -14,6 +14,7 @@ struct LibraryView: View {
     @State private var openStack: SeriesStack?
     @State private var query = ""
     @State private var namingFolder = false
+    @State private var grouping: Book?
     @State private var folderName = ""
     /// Comics waiting to go into the folder being named.
     @State private var folderTargets: [UUID] = []
@@ -65,6 +66,12 @@ struct LibraryView: View {
         default:
             return result.sorted { $0.activity > $1.activity }
         }
+    }
+
+    private var pinned: [Book] {
+        store.books
+            .filter { $0.isPinned }
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
     private var inProgress: [Book] {
@@ -119,6 +126,9 @@ struct LibraryView: View {
                         if let book = continueBook {
                             hero(book)
                         }
+                        if !pinned.isEmpty {
+                            shelf("Pinned", books: pinned)
+                        }
                         if !otherInProgress.isEmpty {
                             shelf("Jump back in", books: otherInProgress)
                         }
@@ -155,6 +165,10 @@ struct LibraryView: View {
         }
         .sheet(item: $openStack) { stack in
             SeriesView(seriesKey: stack.key, fallbackName: stack.name)
+                .environmentObject(store)
+        }
+        .sheet(item: $grouping) { book in
+            GroupSeriesView(bookID: book.id)
                 .environmentObject(store)
         }
         .alert("New folder", isPresented: $namingFolder) {
@@ -459,6 +473,18 @@ struct LibraryView: View {
                                 .offset(x: 12, y: -14)
                         }
                     }
+                    .overlay(alignment: .topLeading) {
+                        if book.isPinned {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundColor(.black)
+                                .frame(width: 26, height: 26)
+                                .background(Circle().fill(Theme.yellow))
+                                .overlay(Circle().strokeBorder(Color.black, lineWidth: 2))
+                                .offset(x: -8, y: -8)
+                                .accessibilityLabel("Pinned")
+                        }
+                    }
 
                 if book.isStarted && !book.isFinished {
                     ChunkyProgress(
@@ -489,7 +515,17 @@ struct LibraryView: View {
             } label: {
                 Label(book.isStarted ? "Continue reading" : "Read", systemImage: "book")
             }
+            Button {
+                store.togglePin(book.id)
+            } label: {
+                Label(book.isPinned ? "Unpin" : "Pin", systemImage: book.isPinned ? "star.slash" : "star")
+            }
             folderMenu([book.id])
+            Button {
+                grouping = book
+            } label: {
+                Label("Group series with", systemImage: "square.stack.3d.up")
+            }
             Button {
                 newTitle = book.title
                 renaming = book

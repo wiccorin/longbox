@@ -121,3 +121,7 @@ enum Spreads {
         return result
     }
 }
+
+extension Book {
+    var isPinned: Bool { pinned ?? false }
+}

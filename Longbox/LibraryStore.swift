@@ -32,6 +32,57 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    // MARK: Pins and grouping
+
+    func togglePin(_ id: UUID) {
+        update(id) { book in
+            book.pinned = (book.pinned ?? false) ? nil : true
+        }
+    }
+
+    /// Every series in the box, with how many comics it holds.
+    var seriesList: [(key: String, name: String, count: Int)] {
+        var names: [String: String] = [:]
+        var counts: [String: Int] = [:]
+        for book in books {
+            guard let key = book.seriesKey else { continue }
+            if names[key] == nil { names[key] = book.series ?? key }
+            counts[key, default: 0] += 1
+        }
+        return names
+            .map { (key: $0.key, name: $0.value, count: counts[$0.key] ?? 0) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// Puts a comic into the named series, working out its issue number if it has none.
+    func group(_ id: UUID, withSeries name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        update(id) { book in
+            book.series = trimmed
+            if book.number == nil {
+                book.number = TitleParser.seriesAndNumber(in: book.title)?.number
+            }
+        }
+    }
+
+    /// Groups two comics together, starting a series from the other comic if it has none.
+    func group(_ id: UUID, withBook otherID: UUID) {
+        guard let other = book(otherID) else { return }
+        let name = other.seriesKey != nil
+            ? (other.series ?? other.title)
+            : (TitleParser.seriesAndNumber(in: other.title)?.series ?? other.title)
+        group(otherID, withSeries: name)
+        group(id, withSeries: name)
+    }
+
+    func ungroup(_ id: UUID) {
+        update(id) { book in
+            book.series = nil
+            book.number = nil
+        }
+    }
+
     // MARK: Folders
 
     var sortedFolders: [ComicFolder] {

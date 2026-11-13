@@ -72,6 +72,7 @@ struct Book: Identifiable, Codable, Equatable {
     var chapters: [Chapter]?
     /// Folders this comic has been added to.
     var folderIDs: [UUID]?
+    var pinned: Bool?
     /// Total time spent with this book open in the reader.
     var secondsRead: Double?
 
