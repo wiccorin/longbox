@@ -276,7 +276,7 @@ struct FolderView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { id in
-                BookDetailView(bookID: id)
+                BookDetailView(bookID: id, siblings: store.books(in: folderID).map { $0.id })
                     .environmentObject(store)
                     .toolbar(.hidden, for: .navigationBar)
             }

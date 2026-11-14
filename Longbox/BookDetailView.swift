@@ -5,14 +5,44 @@ struct BookDetailView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.dismiss) private var dismiss
 
-    let bookID: UUID
+    /// The comic on screen. The arrows move this through the collection.
+    @State private var bookID: UUID
+    /// The collection this was opened from, in order. Nil means work it out from the comic.
+    private let siblings: [UUID]?
 
     @State private var reading = false
     @State private var editing = false
     @State private var lookingUp = false
     @State private var grouping = false
 
+    init(bookID: UUID, siblings: [UUID]? = nil) {
+        _bookID = State(initialValue: bookID)
+        self.siblings = siblings
+    }
+
     private var book: Book? { store.book(bookID) }
+
+    /// What the arrows step through: the folder or series this came from,
+    /// otherwise the comic's own series, otherwise the whole box by title.
+    private var collection: [UUID] {
+        if let siblings {
+            let present = siblings.filter { store.book($0) != nil }
+            if present.count > 1 && present.contains(bookID) { return present }
+        }
+        if let key = book?.seriesKey {
+            let issues = store.series(key)
+            if issues.count > 1 { return issues.map { $0.id } }
+        }
+        return store.books
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+            .map { $0.id }
+    }
+
+    private func step(_ offset: Int) {
+        let list = collection
+        guard let index = list.firstIndex(of: bookID), list.indices.contains(index + offset) else { return }
+        bookID = list[index + offset]
+    }
 
     var body: some View {
         ZStack {
@@ -33,6 +63,8 @@ struct BookDetailView: View {
                     .padding(.top, 14)
                     .padding(.bottom, 40)
                 }
+                // A fresh scroll view per comic, so each one opens at the top.
+                .id(bookID)
             }
         }
         .presentationDragIndicator(.visible)
@@ -57,9 +89,42 @@ struct BookDetailView: View {
     // MARK: Sections
 
     private var closeRow: some View {
-        HStack {
+        let list = collection
+        let index = list.firstIndex(of: bookID) ?? 0
+        let hasPrevious = index > 0
+        let hasNext = index < list.count - 1
+        return HStack(spacing: 10) {
             CaptionBox(text: "Details", shadow: Theme.cyan)
-            Spacer()
+            Spacer(minLength: 0)
+            if list.count > 1 {
+                Button {
+                    step(-1)
+                } label: {
+                    RoundIcon(systemName: "chevron.left")
+                }
+                .buttonStyle(PressDownStyle())
+                .disabled(!hasPrevious)
+                .opacity(hasPrevious ? 1 : 0.3)
+                .accessibilityLabel("Previous comic")
+
+                Text("\(index + 1) OF \(list.count)")
+                    .font(Theme.caption(11))
+                    .italic()
+                    .monospacedDigit()
+                    .foregroundColor(Theme.paper.opacity(0.75))
+                    .lineLimit(1)
+                    .fixedSize()
+
+                Button {
+                    step(1)
+                } label: {
+                    RoundIcon(systemName: "chevron.right")
+                }
+                .buttonStyle(PressDownStyle())
+                .disabled(!hasNext)
+                .opacity(hasNext ? 1 : 0.3)
+                .accessibilityLabel("Next comic")
+            }
             Button {
                 dismiss()
             } label: {
@@ -67,6 +132,7 @@ struct BookDetailView: View {
             }
             .buttonStyle(PressDownStyle())
             .accessibilityLabel("Close")
+            .padding(.leading, 6)
         }
     }
 
