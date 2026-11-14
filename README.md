@@ -16,6 +16,8 @@ A comic and manga reader for iPhone. Opens your own .cbz and .cbr files, keeps y
 - Pin favorites to a shelf at the top of the Box
 - Picks tab: what to read next from your box by reading time, plus optional AI recommendations using your own Anthropic API key
 - Group series: file a comic under the right series by hand
+- Clippings: press and hold a page (or a panel, in Panel view) to save it to a gallery, with a jump back to the page
+- Stats: reading time by day, streak calendar, most-read series and writers
 - Series stacks: issues of one series group together in reading order, with the next issue offered when you finish
 - Trim margins, and two pages side by side in landscape
 - Panel view: step through a page panel by panel

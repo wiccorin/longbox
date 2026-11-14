@@ -9,6 +9,7 @@ struct StripReader: UIViewRepresentable {
     let trim: Bool
     @Binding var page: Int
     let onTap: () -> Void
+    let onClip: (Int) -> Void
 
     func makeUIView(context: Context) -> StripView {
         let view = StripView()
@@ -34,6 +35,7 @@ struct StripReader: UIViewRepresentable {
             }
         }
         view.onTap = onTap
+        view.onClip = onClip
     }
 }
 
@@ -42,6 +44,7 @@ struct StripReader: UIViewRepresentable {
 final class StripView: UIScrollView, UIScrollViewDelegate {
     var onPage: ((Int) -> Void)?
     var onTap: (() -> Void)?
+    var onClip: ((Int) -> Void)?
     private(set) var currentPage = 0
     private(set) var urls: [URL] = []
     private(set) var aspects: [CGFloat] = []
@@ -75,6 +78,9 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap))
         singleTap.require(toFail: doubleTap)
         addGestureRecognizer(singleTap)
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        addGestureRecognizer(longPress)
     }
 
     required init?(coder: NSCoder) {
@@ -234,6 +240,12 @@ final class StripView: UIScrollView, UIScrollViewDelegate {
     }
 
     // MARK: Taps
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, !urls.isEmpty, tops.count == urls.count + 1 else { return }
+        let point = gesture.location(in: content)
+        onClip?(index(atY: max(point.y, 0)))
+    }
 
     @objc private func handleSingleTap() {
         onTap?()

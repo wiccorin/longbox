@@ -50,6 +50,15 @@ struct ComicFolder: Identifiable, Codable, Equatable {
     var createdAt: Date
 }
 
+/// A page or panel saved from a comic.
+struct Clip: Identifiable, Codable, Equatable {
+    var id: UUID
+    var bookID: UUID
+    var bookTitle: String
+    var page: Int
+    var createdAt: Date
+}
+
 struct Book: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
@@ -140,6 +149,12 @@ enum Storage {
     static var coversDir: URL { root.appendingPathComponent("Covers", isDirectory: true) }
     static var libraryFile: URL { root.appendingPathComponent("library.json") }
     static var foldersFile: URL { root.appendingPathComponent("folders.json") }
+    static var clipsDir: URL { root.appendingPathComponent("Clips", isDirectory: true) }
+    static var clipsFile: URL { root.appendingPathComponent("clips.json") }
+
+    static func clipImage(_ id: UUID) -> URL {
+        clipsDir.appendingPathComponent(id.uuidString + ".jpg")
+    }
 
     static func folder(for id: UUID) -> URL {
         booksDir.appendingPathComponent(id.uuidString, isDirectory: true)
@@ -156,7 +171,7 @@ enum Storage {
 
     static func prepare() {
         let fm = FileManager.default
-        for dir in [root, booksDir, coversDir] {
+        for dir in [root, booksDir, coversDir, clipsDir] {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         prepareDropFolder()

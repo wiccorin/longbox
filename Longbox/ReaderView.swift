@@ -33,6 +33,7 @@ struct ReaderView: View {
     @State private var ready = false
     @State private var showChrome = true
     @State private var showEnd = false
+    @State private var clipToast = false
     @State private var urls: [URL] = []
     /// Width over height of each untrimmed page.
     @State private var aspects: [CGFloat]?
@@ -86,6 +87,19 @@ struct ReaderView: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .overlay {
+            if clipToast {
+                Text("CLIPPED!")
+                    .font(Theme.display(34))
+                    .foregroundColor(.black)
+                    .frame(width: 190, height: 190)
+                    .background(Burst(points: 14, inner: 0.78).fill(Theme.yellow))
+                    .background(Burst(points: 14, inner: 0.78).fill(Theme.red).offset(x: 6, y: 6))
+                    .rotationEffect(.degrees(-8))
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
         }
         .statusBarHidden(!showChrome)
         .persistentSystemOverlays(showChrome ? .automatic : .hidden)
@@ -146,7 +160,14 @@ struct ReaderView: View {
     private func pages(_ book: Book, paired: Bool, units: [[Int]]) -> some View {
         if book.mode == .vertical {
             if let shown = stripAspects() {
-                StripReader(urls: urls, aspects: shown, trim: trim, page: $page, onTap: toggleChrome)
+                StripReader(
+                    urls: urls,
+                    aspects: shown,
+                    trim: trim,
+                    page: $page,
+                    onTap: toggleChrome,
+                    onClip: { index in clip(page: index, rect: nil) }
+                )
             } else {
                 loading(trim ? "TRIMMING MARGINS" : "GETTING PAGES READY")
             }
@@ -162,7 +183,12 @@ struct ReaderView: View {
                 cinematic: cinematic,
                 page: $page,
                 onCenterTap: toggleChrome,
-                onPastEnd: { finish(book) }
+                onPastEnd: { finish(book) },
+                onClip: { url, rect in
+                    if let index = urls.firstIndex(of: url) {
+                        clip(page: index, rect: rect)
+                    }
+                }
             )
         }
     }
@@ -207,6 +233,20 @@ struct ReaderView: View {
         guard let start = sessionStart else { return }
         sessionStart = nil
         store.addReadingTime(Date().timeIntervalSince(start), for: bookID)
+    }
+
+    private func clip(page index: Int, rect: CGRect?) {
+        store.addClip(bookID: bookID, page: index, rect: rect, trimmed: trim)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+            clipToast = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            withAnimation(.easeOut(duration: 0.2)) {
+                clipToast = false
+            }
+        }
     }
 
     private func toggleChrome() {
@@ -277,6 +317,11 @@ struct ReaderView: View {
                     Label("Two pages in landscape", systemImage: "book")
                 }
                 Divider()
+                Button {
+                    clip(page: page, rect: nil)
+                } label: {
+                    Label("Clip this page", systemImage: "scissors")
+                }
                 Button {
                     store.addChapter(at: page, for: bookID)
                 } label: {

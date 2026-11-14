@@ -16,6 +16,8 @@ struct PagedReader: UIViewControllerRepresentable {
     @Binding var page: Int
     let onCenterTap: () -> Void
     let onPastEnd: () -> Void
+    /// A page was pressed and held: its file, and the panel on screen if there is one.
+    let onClip: (URL, CGRect?) -> Void
 
     func unitIndex(for page: Int) -> Int {
         units.firstIndex { $0.contains(page) } ?? 0
@@ -96,6 +98,9 @@ struct PagedReader: UIViewControllerRepresentable {
             controller.onTap = { [weak self] zone in
                 self?.handleTap(zone)
             }
+            controller.onClip = { [weak self] url, rect in
+                self?.parent.onClip(url, rect)
+            }
             return controller
         }
 
@@ -170,6 +175,7 @@ final class PageController: UIViewController, UIScrollViewDelegate {
     let cinematic: Bool
     let rightToLeft: Bool
     var onTap: ((Int) -> Void)?
+    var onClip: ((URL, CGRect?) -> Void)?
 
     private var startAtEnd: Bool
     private let scrollView = UIScrollView()
@@ -234,6 +240,9 @@ final class PageController: UIViewController, UIScrollViewDelegate {
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
         singleTap.require(toFail: doubleTap)
         scrollView.addGestureRecognizer(singleTap)
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        scrollView.addGestureRecognizer(longPress)
 
         let pageURLs = urls
         let useTrim = trim
@@ -436,6 +445,21 @@ final class PageController: UIViewController, UIScrollViewDelegate {
         let size = CGSize(width: scrollView.bounds.width / scale, height: scrollView.bounds.height / scale)
         let rect = CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height)
         scrollView.zoom(to: rect, animated: true)
+    }
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, !urls.isEmpty else { return }
+        let point = gesture.location(in: container)
+        var index = 0
+        for (position, view) in imageViews.enumerated() where view.frame.contains(point) {
+            index = position
+        }
+        guard index < urls.count else { return }
+        var rect: CGRect?
+        if guided, index == 0, let current = panelIndex, panels.indices.contains(current) {
+            rect = panels[current]
+        }
+        onClip?(urls[index], rect)
     }
 
     @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {

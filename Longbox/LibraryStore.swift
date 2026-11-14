@@ -12,6 +12,9 @@ final class LibraryStore: ObservableObject {
     private let saveQueue = DispatchQueue(label: "longbox.library.save", qos: .utility)
     private var pending: [(url: URL, fromDropFolder: Bool, folderName: String?)] = []
     @Published private(set) var folders: [ComicFolder] = []
+    @Published private(set) var clips: [Clip] = []
+    /// Seconds read per day, keyed "yyyy-MM-dd".
+    @Published private(set) var dailySeconds: [String: Double] = [:]
     private var currentImportPath: String?
     private var importing = false
 
@@ -26,10 +29,105 @@ final class LibraryStore: ObservableObject {
         Storage.prepare()
         load()
         readingDays = Set(UserDefaults.standard.stringArray(forKey: "readingDays") ?? [])
+        dailySeconds = (UserDefaults.standard.dictionary(forKey: "dailySeconds") as? [String: Double]) ?? [:]
+        if let data = try? Data(contentsOf: Storage.clipsFile),
+           let saved = try? JSONDecoder().decode([Clip].self, from: data) {
+            clips = saved
+        }
         if let data = try? Data(contentsOf: Storage.foldersFile),
            let saved = try? JSONDecoder().decode([ComicFolder].self, from: data) {
             folders = saved
         }
+    }
+
+    // MARK: Clippings
+
+    /// Saves a page, or one panel of it, to the clippings.
+    /// `rect` is a unit rectangle; `trimmed` says it was measured on the margin-trimmed page.
+    func addClip(bookID: UUID, page: Int, rect: CGRect?, trimmed: Bool) {
+        guard let book = book(bookID), book.pages.indices.contains(page) else { return }
+        let source = Storage.folder(for: bookID).appendingPathComponent(book.pages[page])
+        let clip = Clip(id: UUID(), bookID: bookID, bookTitle: book.title, page: page, createdAt: Date())
+        let target = Storage.clipImage(clip.id)
+        Task {
+            let saved = await Task.detached(priority: .userInitiated) { () -> Bool in
+                guard let decoded = PageImage.downsampled(source, shortSide: 1400),
+                      var image = decoded.cgImage
+                else { return false }
+                if var unit = rect {
+                    if trimmed {
+                        let trim = PageImage.trimRect(for: source)
+                        unit = CGRect(
+                            x: trim.minX + unit.minX * trim.width,
+                            y: trim.minY + unit.minY * trim.height,
+                            width: unit.width * trim.width,
+                            height: unit.height * trim.height
+                        )
+                    }
+                    let crop = CGRect(
+                        x: unit.minX * CGFloat(image.width),
+                        y: unit.minY * CGFloat(image.height),
+                        width: unit.width * CGFloat(image.width),
+                        height: unit.height * CGFloat(image.height)
+                    ).integral
+                    if let cropped = image.cropping(to: crop) {
+                        image = cropped
+                    }
+                }
+                guard let data = UIImage(cgImage: image).jpegData(compressionQuality: 0.88) else { return false }
+                return (try? data.write(to: target, options: .atomic)) != nil
+            }.value
+            if saved {
+                clips.insert(clip, at: 0)
+                saveClips()
+            }
+        }
+    }
+
+    func deleteClip(_ id: UUID) {
+        clips.removeAll { $0.id == id }
+        try? FileManager.default.removeItem(at: Storage.clipImage(id))
+        saveClips()
+    }
+
+    private func saveClips() {
+        guard let data = try? JSONEncoder().encode(clips) else { return }
+        let file = Storage.clipsFile
+        saveQueue.async {
+            try? data.write(to: file, options: .atomic)
+        }
+    }
+
+    // MARK: Stats
+
+    func seconds(on date: Date) -> Double {
+        dailySeconds[Self.dayFormatter.string(from: date)] ?? 0
+    }
+
+    func didRead(on date: Date) -> Bool {
+        readingDays.contains(Self.dayFormatter.string(from: date))
+    }
+
+    /// The longest run of days in a row with any reading.
+    var longestStreak: Int {
+        let calendar = Calendar.current
+        let days = readingDays
+            .compactMap { Self.dayFormatter.date(from: $0) }
+            .map { calendar.startOfDay(for: $0) }
+            .sorted()
+        var best = 0
+        var run = 0
+        var previous: Date?
+        for day in days {
+            if let previous, calendar.dateComponents([.day], from: previous, to: day).day == 1 {
+                run += 1
+            } else {
+                run = 1
+            }
+            best = max(best, run)
+            previous = day
+        }
+        return best
     }
 
     // MARK: Pins and grouping
@@ -353,6 +451,9 @@ final class LibraryStore: ObservableObject {
         update(id) { book in
             book.secondsRead = (book.secondsRead ?? 0) + seconds
         }
+        let today = Self.dayFormatter.string(from: Date())
+        dailySeconds[today, default: 0] += seconds
+        UserDefaults.standard.set(dailySeconds, forKey: "dailySeconds")
     }
 
     // MARK: Streak
