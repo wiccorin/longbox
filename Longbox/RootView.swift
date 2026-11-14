@@ -28,8 +28,8 @@ struct RootView: View {
 
     private var bar: some View {
         HStack(spacing: 0) {
-            tabButton(0, title: "BOX", symbol: "shippingbox.fill")
             tabButton(1, title: "FOLDERS", symbol: "folder.fill")
+            tabButton(0, title: "BOX", symbol: "shippingbox.fill")
             tabButton(2, title: "PICKS", symbol: "sparkles")
         }
         .padding(.top, 8)
